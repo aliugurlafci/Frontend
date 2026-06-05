@@ -42,9 +42,9 @@ export function Drawer({
         role="dialog"
         aria-modal="true"
         aria-label={typeof title === "string" ? title : "Details"}
-        className="relative flex h-full w-full max-w-md flex-col rounded-l-2xl border-l border-border bg-surface shadow-lg outline-none"
+        className="glass-strong glass-sheen relative flex h-full w-full max-w-md flex-col rounded-l-2xl shadow-[var(--shadow-lg)] outline-none animate-rise"
       >
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
+        <div className="flex items-center justify-between border-b border-border px-5 py-3.5">
           <h2 className="text-sm font-semibold tracking-tight">{title}</h2>
           <button
             onClick={onClose}
@@ -54,7 +54,7 @@ export function Drawer({
             ✕
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto p-4">{children}</div>
+        <div className="flex-1 overflow-y-auto p-5">{children}</div>
         {footer && <div className="border-t border-border p-4">{footer}</div>}
       </div>
     </div>

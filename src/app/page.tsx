@@ -1,11 +1,20 @@
 import { getServerContext } from "@/lib/http/server-context";
 import { serverApi } from "@/lib/http/server-api";
 import { metadata } from "@/lib/metadata";
+import type { AggregateRow, Measure } from "@/lib/data/query";
+import type { EntityRecord } from "@/lib/metadata/types";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TD, TH, THead, TR } from "@/components/ui/table";
 import { ValueCell } from "@/components/crm/value-cell";
-import { PipelineBarChart, StageDonut, type ChartDatum } from "@/components/crm/dashboard-charts";
+import {
+  PipelineBarChart,
+  HBarChart,
+  StageDonut,
+  ChartLegend,
+  CHART_PALETTE,
+  type ChartDatum,
+} from "@/components/crm/dashboard-charts";
 import { DashboardCards } from "@/components/crm/dashboard-cards";
 
 export const dynamic = "force-dynamic";
@@ -18,11 +27,25 @@ const TONE_COLOR: Record<string, string> = {
   danger: "var(--danger)",
 };
 
-const usd = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 0,
-});
+const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+
+/** Aggregations gracefully degrade to [] when the caller lacks read access. */
+async function safeAgg(entity: string, groupBy: string, measures: Measure[]): Promise<AggregateRow[]> {
+  try {
+    return await serverApi.aggregate(entity, { groupBy, measures });
+  } catch {
+    return [];
+  }
+}
+async function safeList(entity: string, pageSize: number): Promise<EntityRecord[]> {
+  try {
+    return (await serverApi.list(entity, { pageSize })).items;
+  } catch {
+    return [];
+  }
+}
+
+const sumMeasure = (rows: AggregateRow[], key: string) => rows.reduce((s, r) => s + (r.measures[key] ?? 0), 0);
 
 export default async function DashboardPage() {
   const ctx = await getServerContext();
@@ -30,17 +53,40 @@ export default async function DashboardPage() {
   const stageField = dealEntity.fields.find((f) => f.name === "stage")!;
   const nameField = dealEntity.fields.find((f) => f.name === "name")!;
   const amountField = dealEntity.fields.find((f) => f.name === "amount")!;
+  const invStatusField = metadata.getEntity("invoice").fields.find((f) => f.name === "status")!;
 
-  const [accounts, contacts, deals] = await Promise.all([
-    serverApi.list("account", { pageSize: 1 }),
-    serverApi.list("contact", { pageSize: 1 }),
-    serverApi.list("deal", { pageSize: 500, sort: [{ field: "amount", dir: "desc" }] }),
+  const [
+    invoiceByStatus,
+    paymentByMethod,
+    stockByProduct,
+    stockByBranch,
+    deals,
+    products,
+    branches,
+    activity,
+  ] = await Promise.all([
+    safeAgg("invoice", "status", [
+      { op: "sum", field: "total", as: "total" },
+      { op: "sum", field: "balance", as: "balance" },
+    ]),
+    safeAgg("payment", "method", [{ op: "sum", field: "amount", as: "amount" }]),
+    safeAgg("stockMovement", "productId", [{ op: "sum", field: "value", as: "value" }]),
+    safeAgg("stockMovement", "branchId", [{ op: "sum", field: "value", as: "value" }]),
+    serverApi.list("deal", { pageSize: 500, sort: [{ field: "amount", dir: "desc" }] }).catch(() => ({ items: [] as EntityRecord[] })),
+    safeList("product", 500),
+    safeList("branch", 200),
+    serverApi.activity(8).catch(() => []),
   ]);
-  const activity = await serverApi.activity(8);
 
+  // --- KPIs ---
+  const invoiced = sumMeasure(invoiceByStatus, "total");
+  const arOutstanding = sumMeasure(invoiceByStatus, "balance");
+  const inventoryValue = sumMeasure(stockByProduct, "value");
+  const cashCollected = sumMeasure(paymentByMethod, "amount");
+
+  // --- Pipeline (open deals) ---
   const byStage = new Map<string, { count: number; value: number }>();
   let openPipeline = 0;
-  let wonValue = 0;
   for (const d of deals.items) {
     const stage = String(d.stage ?? "lead");
     const amount = typeof d.amount === "number" ? d.amount : 0;
@@ -48,47 +94,62 @@ export default async function DashboardPage() {
     agg.count += 1;
     agg.value += amount;
     byStage.set(stage, agg);
-    if (stage === "won") wonValue += amount;
-    else if (stage !== "lost") openPipeline += amount;
+    if (stage !== "won" && stage !== "lost") openPipeline += amount;
   }
-
   const pipelineData: ChartDatum[] = (stageField.options ?? [])
-    .filter((o) => o.value !== "lost")
+    .filter((o) => o.value !== "lost" && o.value !== "won")
+    .map((o) => ({ label: o.label, value: byStage.get(o.value)?.value ?? 0, color: TONE_COLOR[o.tone ?? "neutral"] }))
+    .filter((d) => d.value > 0);
+
+  // --- Charts ---
+  const invStatusData: ChartDatum[] = (invStatusField.options ?? [])
     .map((o) => ({
       label: o.label,
-      value: byStage.get(o.value)?.value ?? 0,
-      color: TONE_COLOR[o.tone ?? "neutral"],
-    }));
-  const distributionData: ChartDatum[] = (stageField.options ?? [])
-    .map((o) => ({
-      label: o.label,
-      value: byStage.get(o.value)?.count ?? 0,
+      value: Math.round(invoiceByStatus.find((r) => r.key === o.value)?.measures.total ?? 0),
       color: TONE_COLOR[o.tone ?? "neutral"],
     }))
     .filter((d) => d.value > 0);
 
+  const productName = new Map(products.map((p) => [String(p.id), String(p.name ?? p.sku ?? "—")]));
+  const topProducts: ChartDatum[] = stockByProduct
+    .map((r) => ({ label: productName.get(String(r.key)) ?? "—", value: Math.round(r.measures.value ?? 0) }))
+    .filter((d) => d.value > 0)
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 6)
+    .map((d, i) => ({ ...d, color: CHART_PALETTE[i % CHART_PALETTE.length] }));
+
+  const branchName = new Map(branches.map((b) => [String(b.id), String(b.name ?? b.code ?? "—")]));
+  const stockBranchData: ChartDatum[] = stockByBranch
+    .map((r, i) => ({
+      label: r.key ? branchName.get(String(r.key)) ?? "—" : "Unassigned",
+      value: Math.round(r.measures.value ?? 0),
+      color: CHART_PALETTE[i % CHART_PALETTE.length],
+    }))
+    .filter((d) => d.value > 0);
+
   const stats = [
-    { label: "Accounts", value: String(accounts.total) },
-    { label: "Contacts", value: String(contacts.total) },
-    { label: "Open Pipeline", value: usd.format(openPipeline) },
-    { label: "Won", value: usd.format(wonValue) },
+    { label: "Invoiced", value: usd.format(invoiced) },
+    { label: "Outstanding AR", value: usd.format(arOutstanding) },
+    { label: "Inventory value", value: usd.format(inventoryValue) },
+    { label: "Cash collected", value: usd.format(cashCollected) },
   ];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <div>
-        <h1 className="text-lg font-semibold">Dashboard</h1>
-        <p className="text-xs text-muted">Welcome back, {ctx.displayName}.</p>
+        <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+        <p className="mt-0.5 text-sm text-muted">Welcome back, {ctx.displayName}.</p>
       </div>
 
       <DashboardCards />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {stats.map((s) => (
-          <Card key={s.label}>
-            <CardBody>
+          <Card key={s.label} className="overflow-hidden">
+            <CardBody className="relative">
+              <span className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-primary to-secondary opacity-70" aria-hidden />
               <p className="text-xs font-medium uppercase tracking-wide text-muted">{s.label}</p>
-              <p className="mt-1 text-2xl font-semibold tabular-nums">{s.value}</p>
+              <p className="mt-1.5 text-2xl font-semibold tabular-nums">{s.value}</p>
             </CardBody>
           </Card>
         ))}
@@ -96,22 +157,51 @@ export default async function DashboardPage() {
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
-          <CardHeader title="Pipeline value by stage" />
+          <CardHeader title="Invoiced revenue by status" />
           <CardBody>
-            <PipelineBarChart data={pipelineData} />
+            {invStatusData.length ? (
+              <PipelineBarChart data={invStatusData} kind="currency" />
+            ) : (
+              <EmptyChart />
+            )}
           </CardBody>
         </Card>
         <Card>
-          <CardHeader title="Deals by stage" />
+          <CardHeader title="Stock value by branch" />
           <CardBody>
-            <StageDonut data={distributionData} />
+            {stockBranchData.length ? (
+              <>
+                <StageDonut data={stockBranchData} kind="currency" />
+                <ChartLegend data={stockBranchData} kind="currency" />
+              </>
+            ) : (
+              <EmptyChart />
+            )}
           </CardBody>
         </Card>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
-          <CardHeader title="Top deals" />
+          <CardHeader title="Top products by stock value" />
+          <CardBody>
+            {topProducts.length ? <HBarChart data={topProducts} kind="currency" /> : <EmptyChart />}
+          </CardBody>
+        </Card>
+        <Card>
+          <CardHeader title="Open pipeline by stage" />
+          <CardBody>
+            {pipelineData.length ? <PipelineBarChart data={pipelineData} kind="currency" /> : <EmptyChart />}
+          </CardBody>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader
+            title="Top deals"
+            action={<span className="text-xs text-muted">Open {usd.format(openPipeline)}</span>}
+          />
           <Table>
             <THead>
               <tr>
@@ -134,6 +224,11 @@ export default async function DashboardPage() {
                   </TD>
                 </TR>
               ))}
+              {deals.items.length === 0 && (
+                <TR>
+                  <TD>No deals yet.</TD>
+                </TR>
+              )}
             </tbody>
           </Table>
         </Card>
@@ -157,4 +252,8 @@ export default async function DashboardPage() {
       </div>
     </div>
   );
+}
+
+function EmptyChart() {
+  return <div className="flex h-[240px] items-center justify-center text-xs text-muted">No data to display.</div>;
 }

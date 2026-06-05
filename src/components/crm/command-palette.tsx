@@ -97,12 +97,12 @@ export function CommandPalette({
 
   return (
     <div className="fixed inset-0 z-[60] flex items-start justify-center p-4 pt-[12vh]">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} aria-hidden />
+      <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-sm" onClick={onClose} aria-hidden />
       <div
         role="dialog"
         aria-modal="true"
         aria-label="Command palette"
-        className="relative w-full max-w-lg overflow-hidden rounded-lg border border-border bg-surface shadow-lg"
+        className="glass-strong glass-sheen relative w-full max-w-lg overflow-hidden rounded-2xl shadow-[var(--shadow-lg)] animate-rise"
       >
         <div className="flex items-center gap-2 border-b border-border px-3">
           <Icon name="search" className="h-4 w-4 text-muted-2" />
@@ -128,8 +128,8 @@ export function CommandPalette({
                 onMouseDown={() => go(cmd.href)}
                 onMouseEnter={() => setActive(i)}
                 className={cn(
-                  "flex w-full items-center justify-between gap-2 rounded-md px-3 py-2 text-left text-sm",
-                  i === active ? "bg-surface-2" : "hover:bg-surface-2",
+                  "flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors",
+                  i === active ? "bg-primary/12 text-primary" : "hover:bg-surface-2",
                 )}
               >
                 <span>{cmd.label}</span>

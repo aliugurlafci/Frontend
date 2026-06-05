@@ -135,7 +135,7 @@ export function NotificationsBell() {
             markRead();
           }}
           aria-label={t("notif.title")}
-          className="relative inline-flex h-9 w-9 items-center justify-center rounded-md text-muted hover:bg-surface-2 hover:text-foreground"
+          className="relative inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-2 hover:text-foreground"
         >
           <Icon name="bell" className="h-4 w-4" />
           {unread > 0 && (

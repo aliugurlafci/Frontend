@@ -11,7 +11,7 @@ export function Table({ children }: { children: ReactNode }) {
 
 export function THead({ children }: { children: ReactNode }) {
   return (
-    <thead className="border-b border-border bg-surface-2 text-left text-xs font-medium uppercase tracking-wide text-muted">
+    <thead className="border-b border-border bg-surface-2/60 text-left text-xs font-medium uppercase tracking-wide text-muted backdrop-blur-sm">
       {children}
     </thead>
   );
@@ -31,7 +31,7 @@ export function TR({ children, onClick, className }: { children: ReactNode; onCl
       onClick={onClick}
       className={cn(
         "border-b border-border transition-colors last:border-0",
-        onClick && "cursor-pointer hover:bg-surface-2",
+        onClick && "cursor-pointer hover:bg-surface-2/70",
         className,
       )}
     >

@@ -290,7 +290,8 @@ export function RecordDrawer({
                         <dt className="text-xs text-muted">{fieldLabel(f, entity.name)}</dt>
                         <dd className="text-right text-sm">
                           {f.type === "reference" ? (
-                            <span>{refLabel ?? (record[f.name] ? String(record[f.name]) : "—")}</span>
+                            // Show the referenced record's name, never the raw id.
+                            <span>{refLabel ?? "—"}</span>
                           ) : (
                             <ValueCell field={f} value={record[f.name] ?? null} locale={locale} />
                           )}

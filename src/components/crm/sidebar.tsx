@@ -19,11 +19,15 @@ const GROUP_ORDER = [
   "dashboards",
   "crm",
   "sales",
+  "inventory",
+  "purchasing",
+  "accounting",
+  "finance",
+  "branches",
   "projects",
   "marketing",
   "support",
   "people",
-  "finance",
   "comms",
   "admin",
 ];
@@ -31,11 +35,15 @@ const GROUP_LABEL: Record<string, string> = {
   dashboards: "Dashboards",
   crm: "CRM",
   sales: "Sales",
+  inventory: "Inventory",
+  purchasing: "Purchasing",
+  accounting: "Accounting",
+  finance: "Finance",
+  branches: "Branches & Dealers",
   projects: "Projects",
   marketing: "Marketing",
   support: "Support",
   people: "People",
-  finance: "Finance",
   comms: "Communication",
   admin: "Admin",
 };
@@ -81,11 +89,16 @@ function NavLink({
       title={collapsed ? label : undefined}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors",
-        active ? "bg-primary/10 text-primary" : "text-muted hover:bg-surface-2 hover:text-foreground",
+        "group relative flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition-all duration-150",
+        active
+          ? "bg-primary/12 text-primary shadow-[inset_0_1px_0_0_var(--glass-highlight)]"
+          : "text-muted hover:bg-surface-2 hover:text-foreground",
         collapsed && "justify-center px-0",
       )}
     >
+      {active && (
+        <span className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full bg-primary" aria-hidden />
+      )}
       <Icon name={icon} className="h-4 w-4 shrink-0" />
       {!collapsed && <span className="truncate">{label}</span>}
     </Link>
@@ -110,25 +123,26 @@ export function Sidebar({
     <nav
       aria-label="Primary"
       className={cn(
-        "hidden shrink-0 flex-col border-r border-border bg-surface transition-[width] md:flex",
+        "glass sticky top-0 hidden h-screen shrink-0 flex-col border-r border-border transition-[width] duration-200 md:flex",
         collapsed ? "w-16" : "w-56",
       )}
     >
-      <div className="flex h-12 items-center gap-2 border-b border-border px-3">
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary text-xs font-bold text-primary-foreground shadow-sm">
+      <div className="flex h-14 items-center gap-2.5 border-b border-border px-3.5">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary-hover text-sm font-bold text-primary-foreground shadow-[0_4px_14px_-4px_var(--primary)]">
           A
         </div>
         {!collapsed && <span className="text-sm font-semibold tracking-tight">Aula CRM</span>}
       </div>
-      <div className="flex-1 space-y-0.5 overflow-y-auto p-2">
+      <div className="flex-1 space-y-0.5 overflow-y-auto p-2.5">
         <NavLink href="/" active={path === "/"} icon="home" label={t("nav.home")} collapsed={collapsed} />
         {groups.map((g) => (
           <div key={g.group} className="space-y-0.5">
             {!collapsed && (
-              <div className="px-2.5 pb-1 pt-3 text-xs font-semibold uppercase tracking-wide text-muted-2">
+              <div className="px-2.5 pb-1 pt-4 text-[0.6875rem] font-semibold uppercase tracking-wider text-muted-2">
                 {t(`group.${g.group}`)}
               </div>
             )}
+            {collapsed && <div className="mx-2 my-2 border-t border-border" aria-hidden />}
             {g.items.map((item) => (
               <NavLink
                 key={item.name}
@@ -145,7 +159,7 @@ export function Sidebar({
       <button
         onClick={onToggle}
         aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-        className="m-2 flex h-8 items-center justify-center rounded-md text-muted hover:bg-surface-2"
+        className="m-2.5 flex h-8 items-center justify-center rounded-lg border border-border bg-surface-2/50 text-muted transition-colors hover:bg-surface-2 hover:text-foreground"
       >
         <Icon name={collapsed ? "chevronRight" : "chevronLeft"} />
       </button>

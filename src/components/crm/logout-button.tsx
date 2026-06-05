@@ -32,7 +32,7 @@ export function LogoutButton({ displayName }: { displayName: string }) {
         disabled={pending}
         aria-label={t("common.signOut")}
         title={t("common.signOut")}
-        className="flex items-center gap-1 rounded-md border border-border px-2 py-1.5 text-xs text-muted hover:bg-surface-2 hover:text-foreground disabled:opacity-60"
+        className="flex items-center gap-1 rounded-lg border border-border-strong bg-surface/40 px-2 py-1.5 text-xs text-muted backdrop-blur-sm transition-colors hover:bg-surface-2 hover:text-foreground disabled:opacity-60"
       >
         <Icon name="logout" className="h-3.5 w-3.5" />
         <span className="hidden sm:inline">{t("common.signOut")}</span>

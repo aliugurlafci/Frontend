@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { EntityDef, EntityRecord, FieldDef } from "@/lib/metadata/types";
+import type { EntityDef, EntityRecord, FieldDef, FieldValue } from "@/lib/metadata/types";
 import type { Sort } from "@/lib/data/query";
 import { apiFetch } from "@/lib/api-client";
 import { cn } from "@/lib/utils/cn";
@@ -14,6 +14,7 @@ import { Pagination } from "./pagination";
 import { KanbanBoard } from "./kanban-board";
 import { RecordDrawer } from "./record-drawer";
 import { CreateDrawer } from "./create-drawer";
+import { useFieldLookups } from "./field-lookups";
 import { useI18n } from "@/lib/i18n/context";
 
 interface PageData {
@@ -48,6 +49,16 @@ export function EntityView({
   const columns: FieldDef[] = (entity.listColumns ?? entity.fields.slice(0, 4).map((f) => ({ field: f.name })))
     .map((c) => fieldsByName.get(c.field))
     .filter((f): f is FieldDef => Boolean(f));
+
+  // Resolve reference columns to the referenced record's name (never the raw id).
+  const lookups = useFieldLookups(entity);
+  const refLabel = useMemo(
+    () => (field: string, value: FieldValue) =>
+      value === null || value === undefined || value === ""
+        ? undefined
+        : lookups.options[field]?.find((o) => o.value === String(value))?.label,
+    [lookups.options],
+  );
 
   const [data, setData] = useState<PageData>(initial);
   const [page, setPage] = useState(1);
@@ -112,20 +123,30 @@ export function EntityView({
       <Breadcrumbs items={[{ label: t("breadcrumb.home"), href: "/" }, { label: pluralLabel }]} />
       <div className="flex items-end justify-between">
         <div>
-          <h1 className="text-lg font-semibold">{pluralLabel}</h1>
+          <h1 className="text-xl font-bold tracking-tight">{pluralLabel}</h1>
           <p className="text-xs text-muted">{data.total} {t("common.records")}</p>
         </div>
         {entity.board && (
-          <div className="inline-flex rounded-md border border-border p-0.5 text-xs">
+          <div className="glass inline-flex gap-1 rounded-xl p-1 text-xs">
             <button
               onClick={() => switchView("table")}
-              className={cn("rounded px-2.5 py-1", view === "table" ? "bg-surface-2 font-medium" : "text-muted")}
+              className={cn(
+                "rounded-lg px-2.5 py-1 transition-all",
+                view === "table"
+                  ? "bg-surface-solid font-medium text-foreground shadow-sm ring-1 ring-border-strong"
+                  : "text-muted hover:text-foreground",
+              )}
             >
               {t("view.list")}
             </button>
             <button
               onClick={() => switchView("board")}
-              className={cn("rounded px-2.5 py-1", view === "board" ? "bg-surface-2 font-medium" : "text-muted")}
+              className={cn(
+                "rounded-lg px-2.5 py-1 transition-all",
+                view === "board"
+                  ? "bg-surface-solid font-medium text-foreground shadow-sm ring-1 ring-border-strong"
+                  : "text-muted hover:text-foreground",
+              )}
             >
               {t("view.board")}
             </button>
@@ -182,6 +203,7 @@ export function EntityView({
               onRowClick={setSelectedId}
               loading={loading && data.items.length === 0}
               entityName={entity.name}
+              refLabel={refLabel}
             />
           )}
 

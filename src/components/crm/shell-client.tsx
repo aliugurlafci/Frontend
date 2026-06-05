@@ -73,10 +73,10 @@ export function ShellClient({
       <MobileNav items={items} open={mobileOpen} onClose={() => setMobileOpen(false)} />
       <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} entities={items} />
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex items-center gap-2 border-b border-border bg-surface/80 px-3 py-2 backdrop-blur-sm sm:px-4">
+      <div className="flex min-w-0 flex-1 flex-col ">
+        <header className="glass sticky top-0 flex items-center gap-2 border-b border-border px-3 py-2.5 sm:px-4">
           <button
-            className="rounded-md p-1.5 text-muted hover:bg-surface-2 md:hidden"
+            className="rounded-lg p-1.5 text-muted transition-colors hover:bg-surface-2 md:hidden"
             aria-label="Open menu"
             onClick={() => setMobileOpen(true)}
           >
@@ -85,11 +85,11 @@ export function ShellClient({
 
           <button
             onClick={() => setCmdOpen(true)}
-            className="flex h-9 min-w-0 max-w-sm flex-1 items-center gap-2 rounded-md border border-border bg-surface px-3 text-sm text-muted-2 hover:bg-surface-2"
+            className="flex h-9 min-w-0 max-w-sm flex-1 items-center gap-2 rounded-lg border border-border-strong bg-surface/50 px-3 text-sm text-muted-2 backdrop-blur-sm transition-colors hover:bg-surface hover:text-muted"
           >
             <Icon name="search" className="h-3.5 w-3.5 shrink-0" />
             <span className="truncate">{t("common.search")}</span>
-            <kbd className="ml-auto hidden rounded border border-border px-1.5 py-0.5 text-[10px] sm:inline">
+            <kbd className="ml-auto hidden rounded border border-border-strong px-1.5 py-0.5 text-[10px] sm:inline">
               ⌘K
             </kbd>
           </button>
@@ -101,7 +101,7 @@ export function ShellClient({
             <LogoutButton displayName={displayName} />
           </div>
         </header>
-        <main id="main-content" className="flex-1 p-4 sm:p-6">
+        <main id="main-content" className="flex-1 p-4 animate-fade sm:p-6">
           {children}
         </main>
       </div>

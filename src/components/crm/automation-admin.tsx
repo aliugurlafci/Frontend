@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input, Label } from "@/components/ui/input";
 import { Icon } from "@/components/ui/icon";
+import { useI18n } from "@/lib/i18n/context";
 
 interface Endpoint {
   id: string;
@@ -26,6 +27,7 @@ interface Delivery {
 
 export function RunJobsButton() {
   const router = useRouter();
+  const { t } = useI18n();
   const [busy, setBusy] = useState(false);
   async function run() {
     setBusy(true);
@@ -41,7 +43,7 @@ export function RunJobsButton() {
   }
   return (
     <Button size="sm" loading={busy} onClick={run}>
-      <Icon name="recurring" className="h-3.5 w-3.5" /> Run now
+      <Icon name="recurring" className="h-3.5 w-3.5" /> {t("auto.runNow")}
     </Button>
   );
 }

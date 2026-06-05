@@ -2,12 +2,12 @@ import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTML
 import { cn } from "@/lib/utils/cn";
 
 const FIELD =
-  "w-full rounded-lg border bg-surface px-3 py-1.5 text-sm text-foreground placeholder:text-muted-2 transition-[border-color,box-shadow] disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:border-ring";
+  "w-full rounded-lg border bg-surface/60 px-3 py-1.5 text-sm text-foreground placeholder:text-muted-2 backdrop-blur-sm transition-[border-color,box-shadow,background-color] disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:border-ring focus-visible:bg-surface";
 
 function ring(invalid?: boolean): string {
   return invalid
     ? "border-danger focus-visible:ring-danger/30 focus-visible:border-danger"
-    : "border-border hover:border-border-strong";
+    : "border-border-strong hover:border-border-strong hover:bg-surface";
 }
 
 export interface FieldProps {

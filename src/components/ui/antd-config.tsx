@@ -58,26 +58,52 @@ export function AntdConfig({ children, initialDark = false }: { children: ReactN
           colorError: isDark ? "#f04444" : "#dc2626",
           colorSuccess: isDark ? "#22c55e" : "#16a34a",
           colorWarning: "#f59e0b",
-          borderRadius: 8,
+          borderRadius: 10,
+          borderRadiusLG: 14,
+          borderRadiusSM: 8,
           fontFamily: "var(--font-geist-sans), system-ui, sans-serif",
           fontSize: 14,
-          colorBgContainer: isDark ? "#12161f" : "#ffffff",
-          colorBgElevated: isDark ? "#1a1f2b" : "#ffffff",
-          colorBorder: isDark ? "#232a36" : "#e7eaf0",
-          colorBorderSecondary: isDark ? "#232a36" : "#e7eaf0",
+          // Translucent surfaces so antd components blend into the frosted-glass
+          // shell. Floating panels get a real backdrop blur via globals.css.
+          colorBgContainer: isDark ? "rgba(20,25,35,0.55)" : "rgba(255,255,255,0.6)",
+          colorBgElevated: isDark ? "rgba(18,22,31,0.88)" : "rgba(255,255,255,0.85)",
+          colorBgSpotlight: isDark ? "rgba(28,34,47,0.95)" : "rgba(15,23,42,0.92)",
+          boxShadowSecondary: isDark
+            ? "0 24px 60px -18px rgba(0,0,0,0.7)"
+            : "0 24px 60px -18px rgba(15,23,42,0.30)",
+          colorBorder: isDark ? "rgba(255,255,255,0.16)" : "rgba(15,23,42,0.16)",
+          colorBorderSecondary: isDark ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.08)",
           colorText: isDark ? "#e8ecf3" : "#0f172a",
-          colorTextSecondary: isDark ? "#9aa6b6" : "#64748b",
+          colorTextSecondary: isDark ? "#9aa6b6" : "#5a6577",
         },
         components: {
           Table: {
-            headerBg: isDark ? "#1a1f2b" : "#f1f4f8",
-            headerColor: isDark ? "#9aa6b6" : "#64748b",
+            headerBg: isDark ? "rgba(28,34,47,0.6)" : "rgba(241,244,248,0.7)",
+            headerColor: isDark ? "#9aa6b6" : "#5a6577",
             headerSplitColor: "transparent",
-            rowHoverBg: isDark ? "#1a1f2b" : "#f1f4f8",
-            borderColor: isDark ? "#232a36" : "#e7eaf0",
-            cellPaddingBlock: 10,
+            rowHoverBg: isDark ? "rgba(28,34,47,0.6)" : "rgba(241,244,248,0.7)",
+            // antd derives the sort/hover backgrounds by compositing a translucent
+            // black fill over `colorBgContainer` and dropping the alpha. With the
+            // container forced transparent (below), those solids collapse to pure
+            // black — which painted sortable columns black on hover/sort in light
+            // mode. Pin them to subtle neutral tints so they stay theme-correct.
+            headerSortHoverBg: isDark ? "rgba(255,255,255,0.07)" : "rgba(15,23,42,0.05)",
+            headerSortActiveBg: isDark ? "rgba(255,255,255,0.10)" : "rgba(15,23,42,0.08)",
+            fixedHeaderSortActiveBg: isDark ? "rgba(255,255,255,0.10)" : "rgba(15,23,42,0.08)",
+            bodySortBg: isDark ? "rgba(255,255,255,0.03)" : "rgba(15,23,42,0.02)",
+            headerFilterHoverBg: isDark ? "rgba(255,255,255,0.07)" : "rgba(15,23,42,0.06)",
+            borderColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.08)",
+            colorBgContainer: "transparent",
+            cellPaddingBlock: 11,
             cellPaddingInline: 16,
             headerBorderRadius: 0,
+          },
+          Modal: {
+            contentBg: isDark ? "rgba(18,22,31,0.9)" : "rgba(255,255,255,0.88)",
+            headerBg: "transparent",
+          },
+          Card: {
+            colorBgContainer: isDark ? "rgba(20,25,35,0.55)" : "rgba(255,255,255,0.62)",
           },
         },
       }}

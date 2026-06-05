@@ -7,7 +7,7 @@ export interface TabItem {
   label: string;
 }
 
-/** Accessible controlled tab strip (panels rendered by the parent). */
+/** Accessible controlled tab strip — glass segmented control (panels rendered by the parent). */
 export function Tabs({
   items,
   value,
@@ -18,7 +18,7 @@ export function Tabs({
   onChange: (value: string) => void;
 }) {
   return (
-    <div role="tablist" className="flex gap-1 border-b border-border">
+    <div role="tablist" className="glass inline-flex flex-wrap items-center gap-1 rounded-xl p-1">
       {items.map((item) => {
         const active = item.value === value;
         return (
@@ -28,10 +28,10 @@ export function Tabs({
             aria-selected={active}
             onClick={() => onChange(item.value)}
             className={cn(
-              "-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors",
+              "rounded-lg px-3.5 py-1.5 text-sm font-medium transition-all",
               active
-                ? "border-primary text-foreground"
-                : "border-transparent text-muted hover:text-foreground",
+                ? "bg-surface-solid text-foreground shadow-sm ring-1 ring-border-strong"
+                : "text-muted hover:bg-surface-2 hover:text-foreground",
             )}
           >
             {item.label}

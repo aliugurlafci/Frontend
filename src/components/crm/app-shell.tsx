@@ -38,7 +38,6 @@ const NAV_EXTRAS: NavItem[] = [
   { name: "chat", pluralLabel: "Chat", icon: "chat", group: "comms", href: "/chat" },
   { name: "calls", pluralLabel: "Calls", icon: "call", group: "comms", href: "/calls" },
   { name: "file-manager", pluralLabel: "Files", icon: "file", group: "comms", href: "/file-manager" },
-  { name: "social-feed", pluralLabel: "Social Feed", icon: "social", group: "comms", href: "/social-feed" },
   { name: "todo", pluralLabel: "To Do", icon: "todo", group: "comms", href: "/todo" },
   { name: "notes", pluralLabel: "Notes", icon: "note", group: "comms", href: "/notes" },
   { name: "reports", pluralLabel: "Reports", icon: "reports", group: "finance", href: "/reports" },
@@ -66,9 +65,12 @@ export async function AppShell({ children }: { children: ReactNode }) {
   // "home" (the dashboard) is always reachable so users land somewhere.
   const allowed = new Set<string>([...me.screens, "home"]);
 
+  // `task` is intentionally kept out of the nav: the generic Tasks screen overlaps
+  // with To Do, so it's hidden here. The entity itself stays registered so the
+  // calendar and automation triggers that depend on it keep working.
   const entityItems: NavItem[] = metadata
     .listEntities()
-    .filter((e) => !e.system && allowed.has(e.name))
+    .filter((e) => !e.system && e.name !== "task" && allowed.has(e.name))
     .map((e) => ({ name: e.name, pluralLabel: entityLabel(e, locale, { plural: true }), icon: e.icon, group: e.group ?? "crm" }));
 
   const items = [

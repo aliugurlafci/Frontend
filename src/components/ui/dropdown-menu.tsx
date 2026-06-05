@@ -43,7 +43,7 @@ export function DropdownMenu({
       {open && (
         <div
           className={cn(
-            "absolute z-40 mt-1 min-w-44 rounded-md border border-border bg-surface p-1 shadow-lg",
+            "glass-strong glass-sheen absolute z-40 mt-1.5 min-w-44 rounded-xl p-1 shadow-[var(--shadow-lg)] animate-rise",
             align === "end" ? "right-0" : "left-0",
             panelClassName,
           )}
@@ -68,8 +68,8 @@ export function MenuItem({
     <button
       onClick={onClick}
       className={cn(
-        "flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-left text-sm hover:bg-surface-2",
-        danger ? "text-danger" : "text-foreground",
+        "flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm transition-colors hover:bg-surface-2",
+        danger ? "text-danger hover:bg-danger/10" : "text-foreground",
       )}
     >
       {children}

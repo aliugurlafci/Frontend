@@ -13,7 +13,9 @@ const DASHBOARDS: { name: string; href: string; icon: string }[] = [
   { name: "sales-dashboard", href: "/sales-dashboard", icon: "trending" },
   { name: "leads-dashboard", href: "/leads-dashboard", icon: "lead" },
   { name: "deals-dashboard", href: "/deals-dashboard", icon: "target" },
-  { name: "project-dashboard", href: "/project-dashboard", icon: "project" },
+  { name: "inventory-dashboard", href: "/inventory-dashboard", icon: "stock" },
+  { name: "accounting-dashboard", href: "/accounting-dashboard", icon: "ledger" },
+  { name: "branch-dashboard", href: "/branch-dashboard", icon: "branch" },
   { name: "executive-dashboard", href: "/executive-dashboard", icon: "reports" },
   { name: "revenue-dashboard", href: "/revenue-dashboard", icon: "wallet" },
   { name: "growth-dashboard", href: "/growth-dashboard", icon: "trending" },
@@ -33,9 +35,9 @@ export async function DashboardCards() {
           <Link
             key={d.name}
             href={d.href}
-            className="group flex items-start gap-3 rounded-xl border border-border bg-surface p-4 shadow-sm transition-all hover:border-border-strong hover:shadow-md"
+            className="glass glass-sheen group flex items-start gap-3 rounded-2xl p-4 shadow-[var(--shadow-glass)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[var(--shadow-md)]"
           >
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/15 to-secondary/10 text-primary ring-1 ring-primary/15 transition-transform duration-300 group-hover:scale-105">
               <Icon name={d.icon} className="h-4 w-4" />
             </span>
             <span className="min-w-0">

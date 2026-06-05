@@ -26,6 +26,10 @@ export function formatValue(field: FieldDef, value: FieldValue, locale: Locale =
       return typeof value === "string" ? new Date(value).toLocaleDateString() : String(value);
     case "enum":
       return enumLabel(field, value as string, locale);
+    case "reference":
+      // A reference value is a raw id — callers resolve it to a name; never
+      // surface the id itself. Without a resolver, show a neutral placeholder.
+      return "—";
     default:
       return String(value);
   }

@@ -76,7 +76,7 @@ export function KanbanBoard({
               <Badge tone={enumTone(field, s.value)}>{s.label}</Badge>
               <span className="text-xs text-muted-2">{cards.length}</span>
             </div>
-            <div className="min-h-24 space-y-2 rounded-lg bg-surface-2 p-2">
+            <div className="min-h-24 space-y-2 rounded-xl bg-surface-2/60 p-2 ring-1 ring-border backdrop-blur-sm">
               {cards.map((c) => (
                 <button
                   key={c.id}
@@ -88,8 +88,8 @@ export function KanbanBoard({
                   onDragEnd={() => setDragId(null)}
                   onClick={() => onCardClick(c.id)}
                   className={cn(
-                    "block w-full rounded-md border border-border bg-surface p-2.5 text-left text-sm shadow-sm hover:bg-background",
-                    dragId === c.id && "opacity-50",
+                    "block w-full rounded-lg border border-border bg-surface p-2.5 text-left text-sm shadow-sm backdrop-blur-sm transition-all hover:-translate-y-0.5 hover:border-border-strong hover:shadow-md",
+                    dragId === c.id && "rotate-1 opacity-50",
                   )}
                 >
                   <div className="truncate font-medium">{String(c[entity.titleField] ?? c.id)}</div>

@@ -39,7 +39,7 @@ export function MobileNav({
       aria-current={active ? "page" : undefined}
       className={cn(
         "flex items-center gap-2.5 rounded-lg px-2.5 py-2.5 text-sm font-medium transition-colors",
-        active ? "bg-primary/10 text-primary" : "text-muted hover:bg-surface-2 hover:text-foreground",
+        active ? "bg-primary/12 text-primary" : "text-muted hover:bg-surface-2 hover:text-foreground",
       )}
     >
       <Icon name={icon} className="h-4 w-4" />
@@ -49,14 +49,19 @@ export function MobileNav({
 
   return (
     <div className="fixed inset-0 z-50 md:hidden">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} aria-hidden />
+      <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-sm" onClick={onClose} aria-hidden />
       <nav
         aria-label="Mobile"
-        className="relative flex h-full w-64 flex-col border-r border-border bg-surface"
+        className="glass-strong relative flex h-full w-64 flex-col border-r border-border shadow-[var(--shadow-lg)] animate-rise"
       >
-        <div className="flex h-12 items-center justify-between border-b border-border px-3">
-          <span className="text-sm font-semibold">Aula CRM</span>
-          <button onClick={onClose} aria-label="Close menu" className="rounded-md p-1 text-muted hover:bg-surface-2">
+        <div className="flex h-14 items-center justify-between border-b border-border px-3.5">
+          <span className="flex items-center gap-2.5 text-sm font-semibold">
+            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary-hover text-sm font-bold text-primary-foreground shadow-[0_4px_14px_-4px_var(--primary)]">
+              A
+            </span>
+            Aula CRM
+          </span>
+          <button onClick={onClose} aria-label="Close menu" className="rounded-lg p-1 text-muted transition-colors hover:bg-surface-2">
             <Icon name="close" />
           </button>
         </div>

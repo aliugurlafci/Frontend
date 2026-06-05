@@ -1,73 +1,69 @@
 import { serverApi } from "@/lib/http/server-api";
 import { metadata } from "@/lib/metadata";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import { Table, TD, TH, THead, TR } from "@/components/ui/table";
-import { ValueCell } from "@/components/crm/value-cell";
-import type { EntityRecord } from "@/lib/metadata/types";
 import type { AggregateRow } from "@/lib/data/query";
 
 export const dynamic = "force-dynamic";
 
 export default async function GrowthDashboardPage() {
-  const campaignEntity = metadata.getEntity("campaign");
-  const nameField = campaignEntity.fields.find((f) => f.name === "name")!;
-  const channelField = campaignEntity.fields.find((f) => f.name === "channel")!;
-  const statusField = campaignEntity.fields.find((f) => f.name === "status")!;
-  const sentField = campaignEntity.fields.find((f) => f.name === "sent")!;
+  const leadEntity = metadata.getEntity("lead");
+  const sourceField = leadEntity.fields.find((f) => f.name === "source")!;
 
   let accountsTotal = 0;
   let leadsTotal = 0;
-  let campaigns: EntityRecord[] = [];
+  let dealsTotal = 0;
   try {
-    const res = await serverApi.list("account", { pageSize: 1 });
-    accountsTotal = res.total;
+    accountsTotal = (await serverApi.list("account", { pageSize: 1 })).total;
   } catch {
     accountsTotal = 0;
   }
   try {
-    const res = await serverApi.list("lead", { pageSize: 1 });
-    leadsTotal = res.total;
+    leadsTotal = (await serverApi.list("lead", { pageSize: 1 })).total;
   } catch {
     leadsTotal = 0;
   }
   try {
-    const res = await serverApi.list("campaign", { pageSize: 500, sort: [{ field: "sent", dir: "desc" }] });
-    campaigns = res.items;
+    dealsTotal = (await serverApi.list("deal", { pageSize: 1 })).total;
   } catch {
-    campaigns = [];
+    dealsTotal = 0;
   }
 
-  const running = campaigns.filter((c) => c.status === "running").length;
-  const reach = campaigns.reduce(
-    (sum, c) => sum + (typeof c.sent === "number" ? c.sent : 0),
-    0,
-  );
-
-  let byChannel: AggregateRow[] = [];
+  let bySource: AggregateRow[] = [];
   try {
-    byChannel = await serverApi.aggregate("campaign", {
-      groupBy: "channel",
-      measures: [{ op: "count", as: "count" }, { op: "sum", field: "sent", as: "sent" }],
+    bySource = await serverApi.aggregate("lead", {
+      groupBy: "source",
+      measures: [{ op: "count", as: "count" }, { op: "sum", field: "estimatedValue", as: "value" }],
     });
   } catch {
-    byChannel = [];
+    bySource = [];
   }
 
-  const channelLabel = (key: string | null) =>
-    (channelField.options ?? []).find((o) => o.value === key)?.label ?? String(key ?? "—");
+  let wonValue = 0;
+  try {
+    const rows = await serverApi.aggregate("deal", {
+      groupBy: "stage",
+      measures: [{ op: "sum", field: "amount", as: "value" }],
+    });
+    wonValue = Math.round(rows.find((r) => r.key === "won")?.measures.value ?? 0);
+  } catch {
+    wonValue = 0;
+  }
+
+  const sourceLabel = (key: string | null) =>
+    (sourceField.options ?? []).find((o) => o.value === key)?.label ?? String(key ?? "—");
 
   const stats = [
     { label: "Accounts", value: String(accountsTotal) },
     { label: "Leads", value: String(leadsTotal) },
-    { label: "Campaigns Running", value: String(running) },
-    { label: "Total Reach", value: reach.toLocaleString() },
+    { label: "Deals", value: String(dealsTotal) },
+    { label: "Won Value", value: `$${wonValue.toLocaleString()}` },
   ];
 
   return (
     <div className="space-y-4">
       <div>
         <h1 className="text-lg font-semibold">Growth Dashboard</h1>
-        <p className="text-xs text-muted">Acquisition and marketing reach.</p>
+        <p className="text-xs text-muted">Acquisition and pipeline growth.</p>
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -83,57 +79,20 @@ export default async function GrowthDashboardPage() {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
-          <CardHeader title="Campaigns by channel" />
+          <CardHeader title="Leads by source" />
           <CardBody>
             <ul className="space-y-2">
-              {byChannel.map((r) => (
+              {bySource.map((r) => (
                 <li key={String(r.key)} className="flex items-center justify-between text-xs">
-                  <span className="text-foreground">{channelLabel(r.key)}</span>
+                  <span className="text-foreground">{sourceLabel(r.key)}</span>
                   <span className="tabular-nums text-muted">
-                    {r.measures.count ?? 0} · {(r.measures.sent ?? 0).toLocaleString()} sent
+                    {r.measures.count ?? 0} · ${(Math.round(r.measures.value ?? 0)).toLocaleString()} est.
                   </span>
                 </li>
               ))}
-              {byChannel.length === 0 && <li className="text-xs text-muted">No data.</li>}
+              {bySource.length === 0 && <li className="text-xs text-muted">No data.</li>}
             </ul>
           </CardBody>
-        </Card>
-
-        <Card>
-          <CardHeader title="Campaigns" />
-          <Table>
-            <THead>
-              <tr>
-                <TH>Campaign</TH>
-                <TH>Channel</TH>
-                <TH>Status</TH>
-                <TH>Sent</TH>
-              </tr>
-            </THead>
-            <tbody>
-              {campaigns.slice(0, 8).map((c) => (
-                <TR key={c.id}>
-                  <TD>
-                    <ValueCell field={nameField} value={c.name ?? null} />
-                  </TD>
-                  <TD>
-                    <ValueCell field={channelField} value={c.channel ?? null} />
-                  </TD>
-                  <TD>
-                    <ValueCell field={statusField} value={c.status ?? null} />
-                  </TD>
-                  <TD>
-                    <ValueCell field={sentField} value={c.sent ?? null} />
-                  </TD>
-                </TR>
-              ))}
-              {campaigns.length === 0 && (
-                <TR>
-                  <TD>No campaigns.</TD>
-                </TR>
-              )}
-            </tbody>
-          </Table>
         </Card>
       </div>
     </div>

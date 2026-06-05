@@ -2,7 +2,7 @@
 
 import { Table } from "antd";
 import type { ColumnsType, TableProps } from "antd/es/table";
-import type { EntityRecord, FieldDef } from "@/lib/metadata/types";
+import type { EntityRecord, FieldDef, FieldValue } from "@/lib/metadata/types";
 import type { Sort } from "@/lib/data/query";
 import { ValueCell } from "./value-cell";
 import { useI18n } from "@/lib/i18n/context";
@@ -27,6 +27,7 @@ export function DataTable({
   onRowClick,
   loading,
   entityName,
+  refLabel,
 }: {
   titleField: string;
   columns: FieldDef[];
@@ -36,6 +37,8 @@ export function DataTable({
   onRowClick: (id: string) => void;
   loading?: boolean;
   entityName?: string;
+  /** Resolve a reference field value to the referenced record's display name. */
+  refLabel?: (field: string, value: FieldValue) => string | undefined;
 }) {
   const { locale, fieldLabel } = useI18n();
 
@@ -50,7 +53,12 @@ export function DataTable({
     showSorterTooltip: false,
     render: (_value: unknown, record: EntityRecord) => (
       <span className={c.name === titleField ? "font-medium" : undefined}>
-        <ValueCell field={c} value={record[c.name] ?? null} locale={locale} />
+        {c.type === "reference" ? (
+          // Never show the raw id — render the referenced record's name (or —).
+          <span>{refLabel?.(c.name, record[c.name] ?? null) ?? "—"}</span>
+        ) : (
+          <ValueCell field={c} value={record[c.name] ?? null} locale={locale} />
+        )}
       </span>
     ),
   }));

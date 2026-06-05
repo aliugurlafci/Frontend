@@ -9,16 +9,20 @@ html[data-density="compact"] {
   font-size: 14px;
 }
 
-/* Design tokens — modern, soft enterprise palette (cool slate neutrals + CRMS red accent). */
+/* Design tokens — modern glassmorphism palette (cool slate neutrals + CRMS red accent).
+   Surfaces are intentionally translucent so the frosted-glass blur in the shared
+   primitives (Card, header, sidebar, drawer, fields…) reveals the gradient backdrop. */
 :root {
-  --background: #f6f8fb;
-  --surface: #ffffff;
-  --surface-2: #f1f4f8;
+  --background: #eef2f9;
+  --background-2: #e7ecf6;
+  --surface: rgb(255 255 255 / 0.82);
+  --surface-solid: #ffffff;
+  --surface-2: rgb(241 244 248 / 0.78);
   --foreground: #0f172a;
-  --muted: #64748b;
-  --muted-2: #94a3b8;
-  --border: #e7eaf0;
-  --border-strong: #d4d9e2;
+  --muted: #5a6577;
+  --muted-2: #8a94a6;
+  --border: rgb(15 23 42 / 0.08);
+  --border-strong: rgb(15 23 42 / 0.16);
   --primary: #e41f07;
   --primary-foreground: #ffffff;
   --primary-hover: #c81b06;
@@ -29,22 +33,37 @@ html[data-density="compact"] {
   --info: #2563eb;
   --ring: #e41f07;
 
-  --radius: 0.5rem;
-  --radius-sm: 0.375rem;
-  --shadow-sm: 0 1px 2px 0 rgb(15 23 42 / 0.05), 0 1px 1px -1px rgb(15 23 42 / 0.04);
-  --shadow-md: 0 6px 16px -4px rgb(15 23 42 / 0.10), 0 2px 6px -2px rgb(15 23 42 / 0.06);
-  --shadow-lg: 0 18px 40px -12px rgb(15 23 42 / 0.22);
+  /* Glass system */
+  --glass-bg: rgb(255 255 255 / 0.62);
+  --glass-bg-strong: rgb(255 255 255 / 0.82);
+  --glass-border: rgb(255 255 255 / 0.6);
+  --glass-highlight: rgb(255 255 255 / 0.85);
+  --glass-blur: 18px;
+
+  /* Decorative aurora blobs that sit behind the frosted glass. */
+  --aurora-1: rgb(228 31 7 / 0.16);
+  --aurora-2: rgb(109 40 217 / 0.14);
+  --aurora-3: rgb(37 99 235 / 0.12);
+
+  --radius: 0.625rem;
+  --radius-sm: 0.5rem;
+  --shadow-sm: 0 1px 2px 0 rgb(15 23 42 / 0.06), 0 1px 1px -1px rgb(15 23 42 / 0.04);
+  --shadow-md: 0 10px 30px -12px rgb(15 23 42 / 0.18), 0 4px 10px -6px rgb(15 23 42 / 0.10);
+  --shadow-lg: 0 24px 60px -18px rgb(15 23 42 / 0.30);
+  --shadow-glass: 0 8px 32px -8px rgb(15 23 42 / 0.18), inset 0 1px 0 0 rgb(255 255 255 / 0.55);
 }
 
 .dark {
-  --background: #0a0d13;
-  --surface: #12161f;
-  --surface-2: #1a1f2b;
+  --background: #070a10;
+  --background-2: #0c111b;
+  --surface: rgb(20 25 35 / 0.72);
+  --surface-solid: #12161f;
+  --surface-2: rgb(28 34 47 / 0.7);
   --foreground: #e8ecf3;
   --muted: #9aa6b6;
-  --muted-2: #5f6b7c;
-  --border: #232a36;
-  --border-strong: #323b4a;
+  --muted-2: #66727f;
+  --border: rgb(255 255 255 / 0.08);
+  --border-strong: rgb(255 255 255 / 0.16);
   --primary: #fb4b2a;
   --primary-foreground: #ffffff;
   --primary-hover: #ff6b4d;
@@ -54,14 +73,28 @@ html[data-density="compact"] {
   --danger: #f04444;
   --info: #3b82f6;
   --ring: #fb4b2a;
-  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.45);
-  --shadow-md: 0 8px 20px -6px rgb(0 0 0 / 0.55);
-  --shadow-lg: 0 20px 44px -12px rgb(0 0 0 / 0.65);
+
+  --glass-bg: rgb(22 27 38 / 0.55);
+  --glass-bg-strong: rgb(18 22 31 / 0.85);
+  --glass-border: rgb(255 255 255 / 0.1);
+  --glass-highlight: rgb(255 255 255 / 0.08);
+  --glass-blur: 20px;
+
+  --aurora-1: rgb(251 75 42 / 0.18);
+  --aurora-2: rgb(167 139 250 / 0.16);
+  --aurora-3: rgb(59 130 246 / 0.16);
+
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.5);
+  --shadow-md: 0 12px 34px -14px rgb(0 0 0 / 0.6);
+  --shadow-lg: 0 28px 64px -18px rgb(0 0 0 / 0.7);
+  --shadow-glass: 0 8px 32px -8px rgb(0 0 0 / 0.55), inset 0 1px 0 0 rgb(255 255 255 / 0.06);
 }
 
 @theme inline {
   --color-background: var(--background);
+  --color-background-2: var(--background-2);
   --color-surface: var(--surface);
+  --color-surface-solid: var(--surface-solid);
   --color-surface-2: var(--surface-2);
   --color-foreground: var(--foreground);
   --color-muted: var(--muted);
@@ -78,20 +111,159 @@ html[data-density="compact"] {
   --color-info: var(--info);
   --color-ring: var(--ring);
 
+  --color-glass: var(--glass-bg);
+  --color-glass-strong: var(--glass-bg-strong);
+  --color-glass-border: var(--glass-border);
+
   --radius-md: var(--radius);
   --radius-sm: var(--radius-sm);
-  /* Softer, modern scale: sm 6 · md 8 · lg 10 · xl 14 · 2xl 16 (px). */
-  --radius-lg: 0.625rem;
-  --radius-xl: 0.875rem;
+  /* Softer, modern scale: sm 8 · md 10 · lg 12 · xl 16 · 2xl 20 (px). */
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.25rem;
 
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
+html,
 body {
-  background: var(--background);
+  min-height: 100%;
+}
+
+body {
   color: var(--foreground);
+  background-color: var(--background);
+  /* Layered aurora mesh — gives the frosted glass something to refract. Fixed so
+     it stays put while content scrolls. */
+  background-image:
+    radial-gradient(45rem 45rem at 12% -8%, var(--aurora-1), transparent 60%),
+    radial-gradient(40rem 40rem at 108% 8%, var(--aurora-2), transparent 58%),
+    radial-gradient(46rem 46rem at 78% 112%, var(--aurora-3), transparent 60%),
+    linear-gradient(180deg, var(--background), var(--background-2));
+  background-attachment: fixed;
+  background-repeat: no-repeat;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* ---- Glass utilities --------------------------------------------------------
+   Declared in the `utilities` layer so Tailwind's own utilities (e.g. a
+   `hover:bg-*` override placed on the same element) cascade normally over them. */
+@layer utilities {
+  /* Frosted panel — the workhorse for cards, popovers, drawers, the shell chrome. */
+  .glass {
+    background-color: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+    border: 1px solid var(--glass-border);
+  }
+
+  /* Stronger, less see-through glass for overlays/menus that need legibility. */
+  .glass-strong {
+    background-color: var(--glass-bg-strong);
+    backdrop-filter: blur(calc(var(--glass-blur) + 6px)) saturate(150%);
+    -webkit-backdrop-filter: blur(calc(var(--glass-blur) + 6px)) saturate(150%);
+    border: 1px solid var(--glass-border);
+  }
+
+  /* Top-edge sheen that sells the glass look. */
+  .glass-sheen {
+    position: relative;
+  }
+  .glass-sheen::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding-top: 1px;
+    background: linear-gradient(180deg, var(--glass-highlight), transparent 40%);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+
+  /* Gradient text for hero/brand numerals. */
+  .text-gradient {
+    background: linear-gradient(135deg, var(--primary), var(--secondary));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* Decorative blurred aurora orb (auth screens). */
+  .aurora-orb {
+    position: absolute;
+    border-radius: 9999px;
+    filter: blur(64px);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Transform-based entrance — only use on elements that are NOT an ancestor of a
+     position:fixed overlay, since a lingering transform creates a containing block
+     that would re-anchor fixed children (drawers/modals) to this element. Safe on
+     drawer panels themselves (they're children of the fixed overlay). */
+  .animate-rise {
+    animation: glass-rise 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  /* Opacity-only entrance for page/content wrappers — no transform, so it never
+     re-anchors fixed-position drawers/modals rendered inside the page. */
+  .animate-fade {
+    animation: glass-fade 0.3s ease both;
+  }
+}
+
+/* Subtle entrance for content panels. */
+@keyframes glass-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes glass-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Shimmer sweep for skeletons. */
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* ---- Ant Design glass integration ------------------------------------------
+   antd renders floating panels with translucent tokens (see antd-config); add a
+   real backdrop blur here so they read as frosted glass rather than muddy. */
+.ant-select-dropdown,
+.ant-dropdown-menu,
+.ant-picker-dropdown .ant-picker-panel-container,
+.ant-popover-inner,
+.ant-modal-content,
+.ant-drawer-content,
+.ant-message-notice-content,
+.ant-notification-notice {
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+}
+
+/* Soften the antd modal backdrop to match our own overlays. */
+.ant-modal-mask,
+.ant-drawer-mask {
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
 }
 
 /* Visible keyboard focus everywhere (WCAG 2.4.7). */
@@ -117,8 +289,22 @@ body {
   scrollbar-width: thin;
   scrollbar-color: var(--border-strong) transparent;
 }
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: var(--border-strong);
+  border-radius: 9999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--muted-2);
+  background-clip: content-box;
+}
 
-/* Print: hide the app chrome so documents (quotes/invoices) print clean. */
+/* Print: hide the app chrome and the aurora so documents print clean. */
 @media print {
   nav,
   header,
