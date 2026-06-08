@@ -4,6 +4,9 @@ import { serverApi } from "@/lib/http/server-api";
 import { metadata } from "@/lib/metadata";
 import { permissionEngine } from "@/lib/permissions/engine";
 import { formatMoney } from "@/lib/finance/money";
+import { getLocale } from "@/lib/i18n/server";
+import { t as translate } from "@/lib/i18n/messages";
+import { enumLabel } from "@/lib/i18n/labels";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,6 +18,8 @@ export const dynamic = "force-dynamic";
 
 export default async function QuoteListPage() {
   const ctx = await getServerContext();
+  const locale = await getLocale();
+  const t = (key: string, vars?: Record<string, string>) => translate(locale, key, vars);
   const statusField = metadata.getEntity("quote").fields.find((f) => f.name === "status")!;
   const canCreate = permissionEngine.can(ctx, { action: "quote:create", entity: "quote" });
 
@@ -35,13 +40,13 @@ export default async function QuoteListPage() {
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-semibold">Quotes</h1>
-          <p className="text-xs text-muted">{quotes.length} quotes</p>
+          <h1 className="text-lg font-semibold">{t("quoteList.title")}</h1>
+          <p className="text-xs text-muted">{t("quoteList.count", { count: String(quotes.length) })}</p>
         </div>
         {canCreate && (
           <Link href="/quote/new">
             <Button variant="primary" size="sm">
-              New Quote
+              {t("quoteList.new")}
             </Button>
           </Link>
         )}
@@ -49,16 +54,16 @@ export default async function QuoteListPage() {
 
       <Card className="overflow-hidden">
         {quotes.length === 0 ? (
-          <EmptyState icon="quote" title="No quotes yet" description="Create your first quote to get started." />
+          <EmptyState icon="quote" title={t("quoteList.empty")} description={t("quoteList.emptyDesc")} />
         ) : (
           <Table>
             <THead>
               <tr>
-                <TH>Number</TH>
-                <TH>Account</TH>
-                <TH>Status</TH>
-                <TH>Total</TH>
-                <TH>Valid Until</TH>
+                <TH>{t("quoteList.colNumber")}</TH>
+                <TH>{t("quoteList.colAccount")}</TH>
+                <TH>{t("quoteList.colStatus")}</TH>
+                <TH>{t("quoteList.colTotal")}</TH>
+                <TH>{t("quoteList.colValidUntil")}</TH>
               </tr>
             </THead>
             <tbody>
@@ -71,7 +76,7 @@ export default async function QuoteListPage() {
                   </TD>
                   <TD>{accountName.get(String(q.accountId)) ?? "—"}</TD>
                   <TD>
-                    <Badge tone={enumTone(statusField, q.status)}>{String(q.status)}</Badge>
+                    <Badge tone={enumTone(statusField, q.status)}>{enumLabel(statusField, q.status as string, locale)}</Badge>
                   </TD>
                   <TD>{formatMoney(typeof q.total === "number" ? q.total : 0, String(q.currencyCode ?? "USD"))}</TD>
                   <TD>{q.validUntil ? new Date(String(q.validUntil)).toLocaleDateString() : "—"}</TD>

@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useI18n } from "@/lib/i18n/context";
 import { AuthLayout, AUTH_BUTTON } from "@/components/ui/auth-layout";
 
 const CODE_LENGTH = 4;
@@ -11,6 +12,7 @@ const OTP_FIELD =
 
 export default function EmailVerificationPage() {
   const router = useRouter();
+  const { t } = useI18n();
   const [code, setCode] = useState<string[]>(Array(CODE_LENGTH).fill(""));
   const inputs = useRef<Array<HTMLInputElement | null>>([]);
 
@@ -33,7 +35,7 @@ export default function EmailVerificationPage() {
   }
 
   return (
-    <AuthLayout center title="Email Verification" subtitle="We sent a 4-digit code to your email.">
+    <AuthLayout center title={t("auth.emailVerify.title")} subtitle={t("auth.emailVerify.subtitle")}>
       <form
         className="mt-7 space-y-5"
         onSubmit={(e) => {
@@ -54,21 +56,21 @@ export default function EmailVerificationPage() {
               value={value}
               onChange={(e) => handleChange(index, e.target.value)}
               onKeyDown={(e) => handleKeyDown(index, e)}
-              aria-label={`Digit ${index + 1}`}
+              aria-label={t("auth.digit", { n: String(index + 1) })}
               className={OTP_FIELD}
             />
           ))}
         </div>
 
         <button type="submit" className={AUTH_BUTTON}>
-          Verify
+          {t("auth.verify")}
         </button>
       </form>
 
       <p className="mt-5 text-center text-sm text-muted">
-        Didn&apos;t get the code?{" "}
+        {t("auth.emailVerify.noCode")}{" "}
         <button type="button" className="font-semibold text-secondary hover:underline">
-          Resend code
+          {t("auth.resend")}
         </button>
       </p>
     </AuthLayout>

@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { apiFetch, ApiRequestError } from "@/lib/api-client";
+import { useI18n } from "@/lib/i18n/context";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
@@ -22,6 +23,7 @@ export interface PositionOption {
 
 /** Admin screen: create users, assign positions, reset passwords (persists to DB). */
 export function UsersAdmin({ initial, positions }: { initial: UserRecord[]; positions: PositionOption[] }) {
+  const { t } = useI18n();
   const [users, setUsers] = useState<UserRecord[]>(initial);
   const [creating, setCreating] = useState(false);
   const [email, setEmail] = useState("");
@@ -33,12 +35,12 @@ export function UsersAdmin({ initial, positions }: { initial: UserRecord[]; posi
   const positionName = (id: string) => positions.find((p) => p.id === id)?.name ?? "—";
 
   function fail(e: unknown) {
-    toast.error(e instanceof ApiRequestError ? e.message : "Something went wrong");
+    toast.error(e instanceof ApiRequestError ? e.message : t("settings.users.somethingWrong"));
   }
 
   function create() {
     if (!email.trim() || !password || !positionId) {
-      toast.error("Email, password and position are required");
+      toast.error(t("settings.users.errRequired"));
       return;
     }
     startTransition(async () => {
@@ -52,7 +54,7 @@ export function UsersAdmin({ initial, positions }: { initial: UserRecord[]; posi
         setDisplayName("");
         setPassword("");
         setCreating(false);
-        toast.success("User created");
+        toast.success(t("settings.users.created"));
       } catch (e) {
         fail(e);
       }
@@ -72,31 +74,31 @@ export function UsersAdmin({ initial, positions }: { initial: UserRecord[]; posi
   }
 
   function resetPassword(u: UserRecord) {
-    const pw = window.prompt(`New password for ${u.displayName}:`);
+    const pw = window.prompt(t("settings.users.resetPrompt", { name: u.displayName }));
     if (!pw) return;
-    patch(u.id, { password: pw }, "Password reset");
+    patch(u.id, { password: pw }, t("settings.users.passwordReset"));
   }
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-semibold">Users</h1>
-          <p className="text-xs text-muted">Create logins and assign positions. Stored in the database.</p>
+          <h1 className="text-lg font-semibold">{t("settings.users.title")}</h1>
+          <p className="text-xs text-muted">{t("settings.users.subtitle")}</p>
         </div>
         <Button variant="primary" size="sm" onClick={() => setCreating((v) => !v)} disabled={pending}>
-          New user
+          {t("settings.users.newUser")}
         </Button>
       </div>
 
       {creating && (
         <Card>
-          <CardHeader title="New user" />
+          <CardHeader title={t("settings.users.newUser")} />
           <CardBody>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" type="email" />
-              <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Display name" />
-              <Input value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" type="password" />
+              <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder={t("settings.users.phEmail")} type="email" />
+              <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder={t("settings.users.phName")} />
+              <Input value={password} onChange={(e) => setPassword(e.target.value)} placeholder={t("settings.users.phPassword")} type="password" />
               <Select value={positionId} onChange={(e) => setPositionId(e.target.value)}>
                 {positions.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -107,10 +109,10 @@ export function UsersAdmin({ initial, positions }: { initial: UserRecord[]; posi
             </div>
             <div className="mt-3 flex justify-end gap-2">
               <Button variant="secondary" size="sm" onClick={() => setCreating(false)} disabled={pending}>
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button variant="primary" size="sm" onClick={create} disabled={pending}>
-                Create
+                {t("common.create")}
               </Button>
             </div>
           </CardBody>
@@ -121,11 +123,11 @@ export function UsersAdmin({ initial, positions }: { initial: UserRecord[]; posi
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border text-left text-xs font-medium uppercase tracking-wide text-muted-2">
-              <th className="px-4 py-2.5">Name</th>
-              <th className="px-4 py-2.5">Email</th>
-              <th className="px-4 py-2.5">Position</th>
-              <th className="px-4 py-2.5">Status</th>
-              <th className="px-4 py-2.5 text-right">Actions</th>
+              <th className="px-4 py-2.5">{t("settings.users.colName")}</th>
+              <th className="px-4 py-2.5">{t("settings.users.colEmail")}</th>
+              <th className="px-4 py-2.5">{t("settings.users.colPosition")}</th>
+              <th className="px-4 py-2.5">{t("settings.users.colStatus")}</th>
+              <th className="px-4 py-2.5 text-right">{t("settings.users.colActions")}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -136,7 +138,7 @@ export function UsersAdmin({ initial, positions }: { initial: UserRecord[]; posi
                 <td className="px-4 py-3">
                   <Select
                     value={u.positionId}
-                    onChange={(e) => patch(u.id, { positionId: e.target.value }, "Position updated")}
+                    onChange={(e) => patch(u.id, { positionId: e.target.value }, t("settings.users.positionUpdated"))}
                     className="h-8 w-44"
                   >
                     {positions.map((p) => (
@@ -147,15 +149,15 @@ export function UsersAdmin({ initial, positions }: { initial: UserRecord[]; posi
                   </Select>
                 </td>
                 <td className="px-4 py-3">
-                  <Badge tone={u.active ? "success" : "neutral"}>{u.active ? "Active" : "Disabled"}</Badge>
+                  <Badge tone={u.active ? "success" : "neutral"}>{u.active ? t("settings.users.active") : t("settings.users.disabled")}</Badge>
                 </td>
                 <td className="px-4 py-3 text-right">
                   <div className="flex justify-end gap-2">
-                    <Button variant="ghost" size="xs" onClick={() => patch(u.id, { active: !u.active }, u.active ? "Disabled" : "Enabled")}>
-                      {u.active ? "Disable" : "Enable"}
+                    <Button variant="ghost" size="xs" onClick={() => patch(u.id, { active: !u.active }, u.active ? t("settings.users.disabled") : t("settings.users.enable"))}>
+                      {u.active ? t("settings.users.disable") : t("settings.users.enable")}
                     </Button>
                     <Button variant="ghost" size="xs" onClick={() => resetPassword(u)}>
-                      Reset password
+                      {t("settings.users.resetPassword")}
                     </Button>
                   </div>
                 </td>
@@ -164,7 +166,7 @@ export function UsersAdmin({ initial, positions }: { initial: UserRecord[]; posi
             {users.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-4 py-8 text-center text-muted">
-                  No users yet.
+                  {t("settings.users.none")}
                 </td>
               </tr>
             )}

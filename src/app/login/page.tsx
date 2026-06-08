@@ -36,7 +36,7 @@ function LoginForm() {
       router.push(next.startsWith("/") ? next : "/");
       router.refresh();
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : "Sign in failed");
+      setError(err instanceof ApiRequestError ? err.message : t("login.failed"));
       setBusy(false);
     }
   }
@@ -77,7 +77,7 @@ function LoginForm() {
             <button
               type="button"
               onClick={() => setShowPassword((s) => !s)}
-              aria-label={showPassword ? "Hide password" : "Show password"}
+              aria-label={showPassword ? t("auth.hidePassword") : t("auth.showPassword")}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-2 hover:text-foreground"
             >
               {showPassword ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}

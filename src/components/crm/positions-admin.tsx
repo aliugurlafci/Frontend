@@ -32,7 +32,15 @@ const ROLES = [
 const blankDraft = () => ({ id: "", name: "", role: "sales_rep", description: "", screens: [] as string[] });
 
 /** Admin screen: define which screens each position can access (persists to DB). */
-export function PositionsAdmin({ initial, screens }: { initial: PositionRecord[]; screens: ScreenDef[] }) {
+export function PositionsAdmin({
+  initial,
+  screens,
+  groupLabels = {},
+}: {
+  initial: PositionRecord[];
+  screens: ScreenDef[];
+  groupLabels?: Record<string, string>;
+}) {
   const [positions, setPositions] = useState<PositionRecord[]>(initial);
   const [editing, setEditing] = useState<{ id: string; name: string; role: string; description: string; screens: string[] } | null>(null);
   const [pending, startTransition] = useTransition();
@@ -144,7 +152,7 @@ export function PositionsAdmin({ initial, screens }: { initial: PositionRecord[]
               </div>
               {groups.map(([group, list]) => (
                 <div key={group}>
-                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-2">{group}</p>
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-2">{groupLabels[group] ?? group}</p>
                   <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-4">
                     {list.map((s) => (
                       <label key={s.key} className="flex items-center gap-2 rounded border border-border px-2 py-1.5 text-xs">

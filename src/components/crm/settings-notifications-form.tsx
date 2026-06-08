@@ -12,15 +12,15 @@ type Prefs = Record<string, { email: boolean; push: boolean; sms: boolean }>;
 /** As stored/returned — channels may be partial/missing. */
 type InitialPrefs = Record<string, { email?: boolean; push?: boolean; sms?: boolean }> | null;
 
-const EVENTS: { key: string; label: string; email: boolean; push: boolean; sms: boolean }[] = [
-  { key: "deal_won", label: "Deal won", email: true, push: true, sms: false },
-  { key: "deal_stage", label: "Deal stage changed", email: true, push: false, sms: false },
-  { key: "new_lead", label: "New lead assigned", email: true, push: true, sms: true },
-  { key: "invoice_paid", label: "Invoice paid", email: true, push: false, sms: false },
-  { key: "invoice_overdue", label: "Invoice overdue", email: true, push: true, sms: true },
-  { key: "task_due", label: "Task due soon", email: false, push: true, sms: false },
-  { key: "mention", label: "You were mentioned", email: true, push: true, sms: false },
-  { key: "weekly_digest", label: "Weekly digest", email: true, push: false, sms: false },
+const EVENTS: { key: string; email: boolean; push: boolean; sms: boolean }[] = [
+  { key: "deal_won", email: true, push: true, sms: false },
+  { key: "deal_stage", email: true, push: false, sms: false },
+  { key: "new_lead", email: true, push: true, sms: true },
+  { key: "invoice_paid", email: true, push: false, sms: false },
+  { key: "invoice_overdue", email: true, push: true, sms: true },
+  { key: "task_due", email: false, push: true, sms: false },
+  { key: "mention", email: true, push: true, sms: false },
+  { key: "weekly_digest", email: true, push: false, sms: false },
 ];
 
 export function NotificationsForm({ initial }: { initial: InitialPrefs }) {
@@ -47,9 +47,9 @@ export function NotificationsForm({ initial }: { initial: InitialPrefs }) {
     setBusy(true);
     try {
       await apiFetch("/auth/profile", { method: "PATCH", body: { notificationPrefs: prefs } });
-      toast.success("Preferences saved");
+      toast.success(t("settings.notifications.saved"));
     } catch (e) {
-      toast.error(e instanceof ApiRequestError ? e.message : "Save failed");
+      toast.error(e instanceof ApiRequestError ? e.message : t("settings.notifications.saveFailed"));
     } finally {
       setBusy(false);
     }
@@ -58,35 +58,38 @@ export function NotificationsForm({ initial }: { initial: InitialPrefs }) {
   return (
     <>
       <Card>
-        <CardHeader title="Events" />
+        <CardHeader title={t("settings.notifications.events")} />
         <CardBody className="p-0">
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-sm">
               <thead className="border-b border-border bg-background text-left text-xs uppercase tracking-wide text-muted">
                 <tr>
-                  <th className="px-3 py-2 font-medium">Event</th>
-                  <th className="px-3 py-2 text-center font-medium">Email</th>
-                  <th className="px-3 py-2 text-center font-medium">Push</th>
-                  <th className="px-3 py-2 text-center font-medium">SMS</th>
+                  <th className="px-3 py-2 font-medium">{t("settings.notifications.colEvent")}</th>
+                  <th className="px-3 py-2 text-center font-medium">{t("settings.notifications.colEmail")}</th>
+                  <th className="px-3 py-2 text-center font-medium">{t("settings.notifications.colPush")}</th>
+                  <th className="px-3 py-2 text-center font-medium">{t("settings.notifications.colSms")}</th>
                 </tr>
               </thead>
               <tbody>
-                {EVENTS.map((e) => (
+                {EVENTS.map((e) => {
+                  const label = t(`settings.notifications.ev.${e.key}`);
+                  return (
                   <tr key={e.key} className="border-b border-border last:border-0">
-                    <td className="px-3 py-2.5">{e.label}</td>
+                    <td className="px-3 py-2.5">{label}</td>
                     {(["email", "push", "sms"] as Channel[]).map((ch) => (
                       <td key={ch} className="px-3 py-2.5 text-center">
                         <input
                           type="checkbox"
                           checked={prefs[e.key][ch]}
                           onChange={() => toggle(e.key, ch)}
-                          aria-label={`${e.label} — ${ch}`}
+                          aria-label={`${label} — ${ch}`}
                           className="h-4 w-4 cursor-pointer rounded border-border accent-[var(--primary)]"
                         />
                       </td>
                     ))}
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

@@ -1,10 +1,16 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 /**
  * Phase 10 — accessible right-side drawer. Closes on Escape and backdrop click,
  * traps initial focus, and is labelled for screen readers (role=dialog).
+ *
+ * Rendered through a portal to `document.body` so it escapes every ancestor
+ * stacking context (a `backdrop-filter`/`transform` on any wrapper would
+ * otherwise trap a `fixed` overlay and let page chrome paint over it). At
+ * `z-[100]` it sits above the sticky header (z-30) and all in-page overlays.
  */
 export function Drawer({
   open,
@@ -20,6 +26,10 @@ export function Drawer({
   footer?: ReactNode;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const [mounted, setMounted] = useState(false);
+
+  // Portals need a client-side DOM target; mount-gate avoids SSR/hydration use.
+  useEffect(() => setMounted(true), []);
 
   useEffect(() => {
     if (!open) return;
@@ -31,10 +41,10 @@ export function Drawer({
     return () => document.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
-  if (!open) return null;
+  if (!open || !mounted) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex justify-end">
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex justify-end">
       <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-sm" onClick={onClose} aria-hidden />
       <div
         ref={panelRef}
@@ -57,6 +67,7 @@ export function Drawer({
         <div className="flex-1 overflow-y-auto p-5">{children}</div>
         {footer && <div className="border-t border-border p-4">{footer}</div>}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

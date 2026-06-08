@@ -3,15 +3,17 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
+import { useI18n } from "@/lib/i18n/context";
 import { AuthLayout, AUTH_FIELD, AUTH_BUTTON } from "@/components/ui/auth-layout";
 
 export default function ResetPasswordPage() {
   const router = useRouter();
+  const { t } = useI18n();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
 
   return (
-    <AuthLayout title="Reset Password" subtitle="Choose a new password for your account.">
+    <AuthLayout title={t("auth.reset.title")} subtitle={t("auth.reset.subtitle")}>
       <form
         className="mt-7 space-y-5"
         onSubmit={(e) => {
@@ -22,7 +24,7 @@ export default function ResetPasswordPage() {
         {/* New Password */}
         <div>
           <label htmlFor="password" className="mb-1.5 block text-sm font-semibold">
-            New Password
+            {t("auth.reset.newPassword")}
           </label>
           <div className="relative">
             <input
@@ -34,7 +36,7 @@ export default function ResetPasswordPage() {
             <button
               type="button"
               onClick={() => setShowPassword((s) => !s)}
-              aria-label={showPassword ? "Hide password" : "Show password"}
+              aria-label={showPassword ? t("auth.hidePassword") : t("auth.showPassword")}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-2 hover:text-foreground"
             >
               {showPassword ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
@@ -45,7 +47,7 @@ export default function ResetPasswordPage() {
         {/* Confirm Password */}
         <div>
           <label htmlFor="confirm" className="mb-1.5 block text-sm font-semibold">
-            Confirm Password
+            {t("auth.reset.confirm")}
           </label>
           <div className="relative">
             <input
@@ -57,7 +59,7 @@ export default function ResetPasswordPage() {
             <button
               type="button"
               onClick={() => setShowConfirm((s) => !s)}
-              aria-label={showConfirm ? "Hide password" : "Show password"}
+              aria-label={showConfirm ? t("auth.hidePassword") : t("auth.showPassword")}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-2 hover:text-foreground"
             >
               {showConfirm ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
@@ -66,7 +68,7 @@ export default function ResetPasswordPage() {
         </div>
 
         <button type="submit" className={AUTH_BUTTON}>
-          Reset Password
+          {t("auth.reset.submit")}
         </button>
       </form>
     </AuthLayout>

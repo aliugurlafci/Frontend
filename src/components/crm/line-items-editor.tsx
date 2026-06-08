@@ -25,12 +25,15 @@ export function LineItemsEditor({
   products,
   currencyCode,
   readOnly,
+  priceSource = "unitPrice",
   onChange,
 }: {
   lines: EditableLine[];
   products: EntityRecord[];
   currencyCode: string;
   readOnly?: boolean;
+  /** Which product field prefills the line price (sales docs: unitPrice; purchasing: costPrice). */
+  priceSource?: "unitPrice" | "costPrice";
   onChange: (lines: EditableLine[]) => void;
 }) {
   function update(i: number, patch: Partial<EditableLine>) {
@@ -42,10 +45,11 @@ export function LineItemsEditor({
       update(i, { productId: null });
       return;
     }
+    const price = p[priceSource];
     update(i, {
       productId,
       description: String(p.name ?? ""),
-      unitPrice: typeof p.unitPrice === "number" ? p.unitPrice : 0,
+      unitPrice: typeof price === "number" ? price : 0,
       taxRate: typeof p.taxRate === "number" ? p.taxRate : 0,
     });
   }

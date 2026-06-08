@@ -33,16 +33,16 @@ export function ProfileForm({
 
   async function save() {
     if (!displayName.trim() || !email.trim()) {
-      toast.error("Name and email are required");
+      toast.error(t("settings.profile.errRequired"));
       return;
     }
     setBusy(true);
     try {
       await apiFetch("/auth/profile", { method: "PATCH", body: { displayName, email, phone, timezone } });
-      toast.success("Profile saved");
+      toast.success(t("settings.profile.saved"));
       router.refresh();
     } catch (e) {
-      toast.error(e instanceof ApiRequestError ? e.message : "Save failed");
+      toast.error(e instanceof ApiRequestError ? e.message : t("settings.profile.saveFailed"));
     } finally {
       setBusy(false);
     }
@@ -50,30 +50,30 @@ export function ProfileForm({
 
   return (
     <Card>
-      <CardHeader title="Profile" />
+      <CardHeader title={t("settings.profile.cardTitle")} />
       <CardBody className="space-y-4">
         <div className="flex items-center gap-4">
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary text-lg font-semibold text-primary-foreground">
             {initials}
           </div>
-          <p className="text-xs text-muted">Your avatar uses your initials.</p>
+          <p className="text-xs text-muted">{t("settings.profile.avatarHint")}</p>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <Label htmlFor="name">Full name</Label>
+            <Label htmlFor="name">{t("settings.profile.fullName")}</Label>
             <Input id="name" value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Jane Doe" />
           </div>
           <div>
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="email">{t("settings.profile.email")}</Label>
             <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="jane@example.com" />
           </div>
           <div>
-            <Label htmlFor="phone">Phone</Label>
+            <Label htmlFor="phone">{t("settings.profile.phone")}</Label>
             <Input id="phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+90 555 000 0000" />
           </div>
           <div>
-            <Label htmlFor="timezone">Timezone</Label>
+            <Label htmlFor="timezone">{t("settings.profile.timezone")}</Label>
             <Select id="timezone" value={timezone} onChange={(e) => setTimezone(e.target.value)}>
               {TIMEZONES.map((tz) => (
                 <option key={tz} value={tz}>

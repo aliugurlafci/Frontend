@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import type { EntityDef, EntityRecord } from "@/lib/metadata/types";
 import { apiFetch } from "@/lib/api-client";
 import { formatMoney } from "@/lib/finance/money";
+import { useI18n } from "@/lib/i18n/context";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -45,6 +46,8 @@ export function DocumentEditor({
   showPayments?: boolean;
 }) {
   const router = useRouter();
+  const { t, entityLabel, enumLabel } = useI18n();
+  const entitySingular = entityLabel(entity);
   const isNew = id === "new";
   const currencyField = entity.fields.find((f) => f.name === "currencyCode")!;
   const statusField = entity.fields.find((f) => f.name === "status")!;
@@ -95,18 +98,18 @@ export function DocumentEditor({
 
   async function save() {
     if (!header.accountId) {
-      toast.error("Please choose an account");
+      toast.error(t("docEditor.chooseAccount"));
       return;
     }
     setBusy(true);
     try {
       if (isNew) {
         const res = await apiFetch<DocResult>(apiBase, { method: "POST", body: { ...flatHeader(), lines } });
-        toast.success(`${entity.label} created`);
+        toast.success(t("docEditor.created", { entity: entitySingular }));
         router.push(`/${entity.name}/${res.doc.id}`);
       } else {
         await apiFetch<DocResult>(`${apiBase}/${id}`, { method: "PUT", body: { header: flatHeader(), lines } });
-        toast.success(`${entity.label} saved`);
+        toast.success(t("docEditor.saved", { entity: entitySingular }));
         await load();
       }
     } catch (e) {
@@ -133,7 +136,7 @@ export function DocumentEditor({
     setBusy(true);
     try {
       const res = await apiFetch<{ invoiceId: string }>(`${apiBase}/${id}/convert`, { method: "POST" });
-      toast.success("Converted to invoice");
+      toast.success(t("docEditor.converted"));
       router.push(`/invoice/${res.invoiceId}`);
     } catch (e) {
       toast.error((e as Error).message);
@@ -147,10 +150,12 @@ export function DocumentEditor({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-3">
           <Link href={`/${entity.name}`} className="text-sm text-muted hover:text-foreground">
-            <Icon name="chevronLeft" className="inline h-4 w-4" /> {entity.pluralLabel}
+            <Icon name="chevronLeft" className="inline h-4 w-4" /> {entityLabel(entity, { plural: true })}
           </Link>
-          <h1 className="text-lg font-semibold">{isNew ? `New ${entity.label}` : String(doc?.number ?? entity.label)}</h1>
-          {doc && <Badge tone={enumTone(statusField, doc.status)}>{String(doc.status)}</Badge>}
+          <h1 className="text-lg font-semibold">
+            {isNew ? t("docEditor.new", { entity: entitySingular }) : String(doc?.number ?? entitySingular)}
+          </h1>
+          {doc && <Badge tone={enumTone(statusField, doc.status)}>{enumLabel(statusField, doc.status as string)}</Badge>}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {!isNew &&
@@ -175,20 +180,20 @@ export function DocumentEditor({
             </a>
           )}
           <Button variant="primary" size="sm" loading={busy} onClick={save}>
-            Save
+            {t("common.save")}
           </Button>
         </div>
       </div>
 
       <Card>
-        <CardHeader title="Details" />
+        <CardHeader title={t("docEditor.details")} />
         <CardBody className="grid gap-3 sm:grid-cols-2">
           <div>
             <Label htmlFor="account" required>
-              Account
+              {t("docEditor.account")}
             </Label>
             <Select id="account" value={String(header.accountId ?? "")} onChange={(e) => setField("accountId", e.target.value || null)}>
-              <option value="">— Select —</option>
+              <option value="">{t("docEditor.select")}</option>
               {accounts.map((a) => (
                 <option key={a.id} value={a.id}>
                   {String(a.name)}
@@ -197,7 +202,7 @@ export function DocumentEditor({
             </Select>
           </div>
           <div>
-            <Label htmlFor="currency">Currency</Label>
+            <Label htmlFor="currency">{t("docEditor.currency")}</Label>
             <Select id="currency" value={currency} onChange={(e) => setField("currencyCode", e.target.value)}>
               {currencyField.options?.map((o) => (
                 <option key={o.value} value={o.value}>
@@ -218,14 +223,14 @@ export function DocumentEditor({
             </div>
           ))}
           <div className="sm:col-span-2">
-            <Label htmlFor="notes">Notes</Label>
+            <Label htmlFor="notes">{t("docEditor.notes")}</Label>
             <Textarea id="notes" value={String(header.notes ?? "")} onChange={(e) => setField("notes", e.target.value)} />
           </div>
         </CardBody>
       </Card>
 
       <Card>
-        <CardHeader title="Line items" />
+        <CardHeader title={t("docEditor.lineItems")} />
         <CardBody>
           <LineItemsEditor lines={lines} products={products} currencyCode={currency} onChange={setLines} />
         </CardBody>
@@ -233,7 +238,7 @@ export function DocumentEditor({
 
       {!isNew && doc && showPayments && (
         <Card>
-          <CardHeader title="Payments" />
+          <CardHeader title={t("docEditor.payments")} />
           <CardBody>
             <PaymentsPanel
               invoiceId={doc.id}
@@ -247,7 +252,7 @@ export function DocumentEditor({
 
       {!isNew && doc && (
         <p className="text-right text-sm font-semibold">
-          Total: {formatMoney(typeof doc.total === "number" ? doc.total : 0, currency)}
+          {t("docEditor.total")}: {formatMoney(typeof doc.total === "number" ? doc.total : 0, currency)}
         </p>
       )}
     </div>

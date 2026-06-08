@@ -4,17 +4,19 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api-client";
+import { useI18n } from "@/lib/i18n/context";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Select } from "@/components/ui/input";
 
 export function RepublishButton() {
   const router = useRouter();
+  const { t } = useI18n();
   const [busy, setBusy] = useState(false);
   async function run() {
     setBusy(true);
     try {
       const r = await apiFetch<{ version: number }>(`/admin/metadata/republish`, { method: "POST" });
-      toast.success(`Metadata re-published (v${r.version})`);
+      toast.success(t("settings.admin.republished", { version: String(r.version) }));
       router.refresh();
     } catch (e) {
       toast.error((e as Error).message);
@@ -24,7 +26,7 @@ export function RepublishButton() {
   }
   return (
     <Button size="sm" loading={busy} onClick={run}>
-      Re-publish metadata
+      {t("settings.admin.republish")}
     </Button>
   );
 }
@@ -35,6 +37,7 @@ interface ImportResult {
 }
 
 export function ImportForm({ entities }: { entities: { name: string; label: string }[] }) {
+  const { t } = useI18n();
   const [entity, setEntity] = useState(entities[0]?.name ?? "");
   const [csv, setCsv] = useState("");
   const [fileName, setFileName] = useState("");
@@ -50,7 +53,7 @@ export function ImportForm({ entities }: { entities: { name: string; label: stri
 
   async function run() {
     if (!csv) {
-      toast.error("Choose a CSV file first");
+      toast.error(t("settings.admin.chooseCsv"));
       return;
     }
     setBusy(true);
@@ -58,7 +61,7 @@ export function ImportForm({ entities }: { entities: { name: string; label: stri
     try {
       const r = await apiFetch<ImportResult>(`/import/${entity}`, { method: "POST", body: { csv } });
       setResult(r);
-      toast.success(`Imported ${r.created.length} · ${r.errors.length} errors`);
+      toast.success(t("settings.admin.imported", { created: String(r.created.length), errors: String(r.errors.length) }));
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -70,7 +73,7 @@ export function ImportForm({ entities }: { entities: { name: string; label: stri
     <div className="space-y-3">
       <div className="grid gap-2 sm:grid-cols-3 sm:items-end">
         <div>
-          <Label htmlFor="imp-entity">Entity</Label>
+          <Label htmlFor="imp-entity">{t("settings.admin.entity")}</Label>
           <Select id="imp-entity" value={entity} onChange={(e) => setEntity(e.target.value)}>
             {entities.map((e) => (
               <option key={e.name} value={e.name}>
@@ -80,22 +83,20 @@ export function ImportForm({ entities }: { entities: { name: string; label: stri
           </Select>
         </div>
         <div>
-          <Label htmlFor="imp-file">CSV file</Label>
+          <Label htmlFor="imp-file">{t("settings.admin.csvFile")}</Label>
           <Input id="imp-file" type="file" accept=".csv,text/csv" onChange={onFile} />
         </div>
         <Button variant="primary" size="sm" loading={busy} onClick={run}>
-          Import {fileName && `(${fileName})`}
+          {t("settings.admin.import")} {fileName && `(${fileName})`}
         </Button>
       </div>
       {result && (
         <div className="text-xs">
-          <p className="text-success">Created {result.created.length} records.</p>
+          <p className="text-success">{t("settings.admin.createdRecords", { count: String(result.created.length) })}</p>
           {result.errors.length > 0 && (
             <ul className="mt-1 space-y-0.5 text-danger">
               {result.errors.slice(0, 8).map((er, i) => (
-                <li key={i}>
-                  Row {er.row}: {er.message}
-                </li>
+                <li key={i}>{t("settings.admin.rowError", { row: String(er.row), message: er.message })}</li>
               ))}
             </ul>
           )}

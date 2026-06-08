@@ -44,6 +44,8 @@ const ENTITY: Record<"tr" | "de", Record<string, Pair>> = {
     billPayment: { s: "Borç Ödemesi", p: "Borç Ödemeleri" },
     stockTransfer: { s: "Stok Transferi", p: "Stok Transferleri" },
     stockAdjustment: { s: "Stok Düzeltme", p: "Stok Düzeltmeleri" },
+    labelTemplate: { s: "Etiket Şablonu", p: "Etiket Şablonları" },
+    posSession: { s: "Kasa Oturumu", p: "Kasa Oturumları" },
     department: { s: "Departman", p: "Departmanlar" },
     employee: { s: "Çalışan", p: "Personel" },
     product: { s: "Ürün", p: "Ürünler" },
@@ -91,6 +93,8 @@ const ENTITY: Record<"tr" | "de", Record<string, Pair>> = {
     billPayment: { s: "Zahlungsausgang", p: "Zahlungsausgänge" },
     stockTransfer: { s: "Umlagerung", p: "Umlagerungen" },
     stockAdjustment: { s: "Bestandskorrektur", p: "Bestandskorrekturen" },
+    labelTemplate: { s: "Etikettenvorlage", p: "Etikettenvorlagen" },
+    posSession: { s: "Kassensitzung", p: "Kassensitzungen" },
     department: { s: "Abteilung", p: "Abteilungen" },
     employee: { s: "Mitarbeiter", p: "Personal" },
     product: { s: "Produkt", p: "Produkte" },
@@ -131,6 +135,7 @@ const FIELD: Record<"tr" | "de", Record<string, string>> = {
     code: "Kod", branchId: "Şube", dealerId: "Bayi", creditLimit: "Kredi Limiti", type: "Tür",
     address: "Adres", managerId: "Yönetici", contactId: "Kişi",
     trackStock: "Stok Takibi", costPrice: "Maliyet Fiyatı", reorderLevel: "Sipariş Eşiği", uom: "Birim",
+    barcode: "Barkod", barcodeType: "Barkod Tipi", imageId: "Görsel",
     warehouseId: "Depo", productId: "Ürün", unitCost: "Birim Maliyet", taxNumber: "Vergi No",
     movedAt: "Hareket Tarihi", refType: "Kaynak", ref: "Referans", stockKey: "Stok Anahtarı",
     poId: "Satınalma Siparişi", grnId: "Mal Kabul", supplierId: "Tedarikçi",
@@ -142,6 +147,10 @@ const FIELD: Record<"tr" | "de", Record<string, string>> = {
     billId: "Tedarikçi Faturası", billDate: "Fatura Tarihi", fromWarehouseId: "Kaynak Depo",
     toWarehouseId: "Hedef Depo", qtyDelta: "Miktar Değişimi", adjustedAt: "Düzeltme Tarihi",
     reason: "Neden", goodsReceiptId: "Mal Kabul", transferDate: "Transfer Tarihi",
+    widthMm: "Genişlik (mm)", heightMm: "Yükseklik (mm)", dpi: "DPI", elements: "Öğeler",
+    cashierId: "Kasiyer", openingFloat: "Açılış Kasası", openedAt: "Açılış", closedAt: "Kapanış",
+    salesTotal: "Satış Toplamı", cashTotal: "Nakit Satış", expectedCash: "Beklenen Nakit",
+    countedCash: "Sayılan Nakit", variance: "Fark",
   },
   de: {
     name: "Name", firstName: "Vorname", lastName: "Nachname", email: "E-Mail", phone: "Telefon",
@@ -164,6 +173,7 @@ const FIELD: Record<"tr" | "de", Record<string, string>> = {
     code: "Code", branchId: "Filiale", dealerId: "Händler", creditLimit: "Kreditlimit", type: "Typ",
     address: "Adresse", managerId: "Manager", contactId: "Kontakt",
     trackStock: "Bestandsführung", costPrice: "Einstandspreis", reorderLevel: "Meldebestand", uom: "Einheit",
+    barcode: "Barcode", barcodeType: "Barcode-Typ", imageId: "Bild",
     warehouseId: "Lager", productId: "Produkt", unitCost: "Stückkosten", taxNumber: "Steuernr.",
     movedAt: "Bewegungsdatum", refType: "Quelle", ref: "Referenz", stockKey: "Lagerschlüssel",
     poId: "Bestellung", grnId: "Wareneingang", supplierId: "Lieferant",
@@ -175,6 +185,10 @@ const FIELD: Record<"tr" | "de", Record<string, string>> = {
     billId: "Eingangsrechnung", billDate: "Rechnungsdatum", fromWarehouseId: "Von Lager",
     toWarehouseId: "Nach Lager", qtyDelta: "Mengenänderung", adjustedAt: "Korrekturdatum",
     reason: "Grund", goodsReceiptId: "Wareneingang", transferDate: "Umlagerungsdatum",
+    widthMm: "Breite (mm)", heightMm: "Höhe (mm)", dpi: "DPI", elements: "Elemente",
+    cashierId: "Kassierer", openingFloat: "Anfangsbestand", openedAt: "Geöffnet", closedAt: "Geschlossen",
+    salesTotal: "Umsatz gesamt", cashTotal: "Barverkauf", expectedCash: "Erwartetes Bargeld",
+    countedCash: "Gezähltes Bargeld", variance: "Differenz",
   },
 };
 
@@ -206,6 +220,7 @@ const ENUM: Record<"tr" | "de", Record<string, string>> = {
     received: "Teslim Alındı", posted: "İşlendi",
     asset: "Varlık", liability: "Yükümlülük", equity: "Özkaynak", revenue: "Gelir", expense: "Gider",
     debit: "Borç", credit: "Alacak", manual: "Manuel", reversal: "Ters Kayıt", closed: "Kapalı",
+    code128: "Code 128", ean13: "EAN-13", upc: "UPC-A", qr: "QR Kod",
   },
   de: {
     active: "Aktiv", inactive: "Inaktiv", on_leave: "Beurlaubt",
@@ -227,6 +242,7 @@ const ENUM: Record<"tr" | "de", Record<string, string>> = {
     received: "Erhalten", posted: "Gebucht",
     asset: "Aktiva", liability: "Passiva", equity: "Eigenkapital", revenue: "Ertrag", expense: "Aufwand",
     debit: "Soll", credit: "Haben", manual: "Manuell", reversal: "Storno", closed: "Geschlossen",
+    code128: "Code 128", ean13: "EAN-13", upc: "UPC-A", qr: "QR Code",
   },
 };
 

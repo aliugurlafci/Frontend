@@ -1,4 +1,5 @@
 import { serverApi } from "@/lib/http/server-api";
+import { getT } from "@/lib/i18n/server";
 import { Card, CardBody } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
@@ -6,6 +7,7 @@ export const dynamic = "force-dynamic";
 
 export default async function ActivityPage() {
   const entries = await serverApi.activity(100);
+  const t = await getT();
 
   const byDay = new Map<string, typeof entries>();
   for (const e of entries) {
@@ -15,7 +17,7 @@ export default async function ActivityPage() {
 
   return (
     <div className="space-y-3">
-      <h1 className="text-lg font-semibold">Activity</h1>
+      <h1 className="text-lg font-semibold">{t("activityPage.title")}</h1>
       <Card>
         <CardBody className="space-y-5">
           {[...byDay.entries()].map(([day, items]) => (
@@ -27,14 +29,14 @@ export default async function ActivityPage() {
                     <span className="absolute -left-[1.45rem] top-1 h-1.5 w-1.5 rounded-full bg-primary" />
                     <span className="text-foreground">{a.summary}</span>{" "}
                     <Badge tone="neutral">{a.entity}</Badge>
-                    <span className="ml-1 text-muted-2">by {a.actorId}</span>
+                    <span className="ml-1 text-muted-2">{t("activityPage.by", { actor: String(a.actorId) })}</span>
                     <div className="text-muted">{new Date(a.at).toLocaleTimeString()}</div>
                   </li>
                 ))}
               </ol>
             </div>
           ))}
-          {entries.length === 0 && <p className="text-sm text-muted">No activity yet.</p>}
+          {entries.length === 0 && <p className="text-sm text-muted">{t("dash.noActivity")}</p>}
         </CardBody>
       </Card>
     </div>

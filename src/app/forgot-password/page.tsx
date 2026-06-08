@@ -3,13 +3,15 @@
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Mail } from "lucide-react";
+import { useI18n } from "@/lib/i18n/context";
 import { AuthLayout, AUTH_FIELD, AUTH_BUTTON } from "@/components/ui/auth-layout";
 
 export default function ForgotPasswordPage() {
   const router = useRouter();
+  const { t } = useI18n();
 
   return (
-    <AuthLayout title="Forgot Password?" subtitle="Enter your email to receive a reset link.">
+    <AuthLayout title={t("auth.forgot.title")} subtitle={t("auth.forgot.subtitle")}>
       <form
         className="mt-7 space-y-5"
         onSubmit={(e) => {
@@ -20,7 +22,7 @@ export default function ForgotPasswordPage() {
         {/* Email */}
         <div>
           <label htmlFor="email" className="mb-1.5 block text-sm font-semibold">
-            Email Address
+            {t("auth.emailAddress")}
           </label>
           <div className="relative">
             <input id="email" type="email" placeholder="you@example.com" className={`${AUTH_FIELD} pr-10`} />
@@ -29,13 +31,13 @@ export default function ForgotPasswordPage() {
         </div>
 
         <button type="submit" className={AUTH_BUTTON}>
-          Send Reset Link
+          {t("auth.forgot.send")}
         </button>
       </form>
 
       <p className="mt-5 text-sm text-muted">
         <Link href="/login" className="font-semibold text-secondary hover:underline">
-          Back to Sign In
+          {t("auth.forgot.back")}
         </Link>
       </p>
     </AuthLayout>

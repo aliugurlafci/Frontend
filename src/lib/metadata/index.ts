@@ -44,6 +44,8 @@ import { vendorBillLineEntity } from "./entities/vendor-bill-line";
 import { billPaymentEntity } from "./entities/bill-payment";
 import { stockTransferEntity } from "./entities/stock-transfer";
 import { stockAdjustmentEntity } from "./entities/stock-adjustment";
+import { labelTemplateEntity } from "./entities/label-template";
+import { posSessionEntity } from "./entities/pos-session";
 import { departmentEntity } from "./entities/department";
 import { employeeEntity } from "./entities/employee";
 import { noteEntity } from "./entities/note";
@@ -89,6 +91,9 @@ export const crmEntities: EntityDef[] = [
   goodsReceiptLineEntity,
   stockTransferEntity,
   stockAdjustmentEntity,
+  // barcode labels + POS
+  labelTemplateEntity,
+  posSessionEntity,
   // accounting
   ledgerAccountEntity,
   fiscalPeriodEntity,

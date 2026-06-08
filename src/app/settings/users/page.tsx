@@ -1,4 +1,5 @@
 import { serverApi } from "@/lib/http/server-api";
+import { getT } from "@/lib/i18n/server";
 import { UsersAdmin, type UserRecord, type PositionOption } from "@/components/crm/users-admin";
 import { Card, CardBody } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -18,10 +19,11 @@ export default async function UsersPage() {
     }));
     return <UsersAdmin initial={users} positions={positions} />;
   } catch {
+    const t = await getT();
     return (
       <Card>
         <CardBody>
-          <EmptyState icon="shield" title="Administrators only" description="You need an admin position to manage users." />
+          <EmptyState icon="shield" title={t("settings.users.adminsOnly")} description={t("settings.users.adminsOnlyDesc")} />
         </CardBody>
       </Card>
     );

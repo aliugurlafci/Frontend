@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { apiFetch, apiUploadWithProgress, ApiRequestError } from "@/lib/api-client";
+import { useI18n } from "@/lib/i18n/context";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/input";
@@ -20,13 +21,7 @@ export interface FileRecord {
   version: number;
 }
 
-const FOLDERS: { id: Folder; name: string }[] = [
-  { id: "documents", name: "Documents" },
-  { id: "contracts", name: "Contracts" },
-  { id: "invoices", name: "Invoices" },
-  { id: "media", name: "Media" },
-  { id: "other", name: "Other" },
-];
+const FOLDERS: Folder[] = ["documents", "contracts", "invoices", "media", "other"];
 
 const STORAGE_CAP_KB = 100 * 1024 * 1024; // 100 GB
 
@@ -41,6 +36,7 @@ function fmtSize(kb: number): string {
 
 /** File manager backed by the `file` entity + real local-disk storage. */
 export function FilesBoard({ initial }: { initial: FileRecord[] }) {
+  const { t } = useI18n();
   const [files, setFiles] = useState<FileRecord[]>(initial);
   const [uploading, setUploading] = useState(false);
   const [folder, setFolder] = useState<Folder>("documents");
@@ -59,13 +55,13 @@ export function FilesBoard({ initial }: { initial: FileRecord[] }) {
   const usedPct = Math.min(100, Math.round((usedKb / STORAGE_CAP_KB) * 100));
 
   function fail(e: unknown) {
-    toast.error(e instanceof ApiRequestError ? e.message : "Something went wrong");
+    toast.error(e instanceof ApiRequestError ? e.message : t("common.somethingWrong"));
   }
 
   async function upload() {
     const file = fileRef.current?.files?.[0];
     if (!file) {
-      toast.error("Choose a file first");
+      toast.error(t("files.chooseFirst"));
       return;
     }
     const form = new FormData();
@@ -79,7 +75,7 @@ export function FilesBoard({ initial }: { initial: FileRecord[] }) {
       if (fileRef.current) fileRef.current.value = "";
       setFolder("documents");
       setUploading(false);
-      toast.success(`Uploaded ${created.name}`);
+      toast.success(t("files.uploaded", { name: created.name }));
     } catch (e) {
       fail(e);
     } finally {
@@ -102,15 +98,15 @@ export function FilesBoard({ initial }: { initial: FileRecord[] }) {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-lg font-semibold">File Manager</h1>
-        <p className="text-xs text-muted">Browse, organize, and share your files</p>
+        <h1 className="text-lg font-semibold">{t("files.title")}</h1>
+        <p className="text-xs text-muted">{t("files.subtitle")}</p>
       </div>
 
       <Card>
         <CardBody className="space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold">Storage</h2>
-            <span className="text-xs text-muted">{fmtSize(usedKb)} of 100 GB</span>
+            <h2 className="text-sm font-semibold">{t("files.storage")}</h2>
+            <span className="text-xs text-muted">{t("files.storageOf", { used: fmtSize(usedKb) })}</span>
           </div>
           <div className="h-2 rounded bg-surface-2">
             <div className="h-2 rounded bg-primary" style={{ width: `${usedPct}%` }} />
@@ -119,17 +115,17 @@ export function FilesBoard({ initial }: { initial: FileRecord[] }) {
       </Card>
 
       <div>
-        <h2 className="mb-2 text-sm font-semibold">Quick access</h2>
+        <h2 className="mb-2 text-sm font-semibold">{t("files.quickAccess")}</h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           {FOLDERS.map((f) => (
-            <Card key={f.id} className="transition-colors hover:bg-surface-2">
+            <Card key={f} className="transition-colors hover:bg-surface-2">
               <CardBody className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
                   <Icon name="file" className="h-5 w-5" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-foreground">{f.name}</p>
-                  <p className="text-xs text-muted">{counts[f.id] ?? 0} items</p>
+                  <p className="text-sm font-medium text-foreground">{t(`files.folder.${f}`)}</p>
+                  <p className="text-xs text-muted">{t("files.itemsCount", { count: String(counts[f] ?? 0) })}</p>
                 </div>
               </CardBody>
             </Card>
@@ -139,11 +135,11 @@ export function FilesBoard({ initial }: { initial: FileRecord[] }) {
 
       <Card className="overflow-hidden">
         <CardHeader
-          title="Recent files"
+          title={t("files.recent")}
           action={
             <Button variant="primary" size="sm" onClick={() => setUploading((v) => !v)} disabled={pending || progress !== null}>
               <Icon name="plus" className="h-3.5 w-3.5" />
-              Upload
+              {t("files.upload")}
             </Button>
           }
         />
@@ -163,8 +159,8 @@ export function FilesBoard({ initial }: { initial: FileRecord[] }) {
                 disabled={progress !== null}
               >
                 {FOLDERS.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.name}
+                  <option key={f} value={f}>
+                    {t(`files.folder.${f}`)}
                   </option>
                 ))}
               </Select>
@@ -175,14 +171,16 @@ export function FilesBoard({ initial }: { initial: FileRecord[] }) {
                 className="flex-1 text-sm text-muted file:mr-3 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-primary-foreground disabled:opacity-60"
               />
               <Button type="submit" variant="primary" size="sm" disabled={progress !== null}>
-                {progress !== null ? "Uploading…" : "Upload"}
+                {progress !== null ? t("files.uploading") : t("files.upload")}
               </Button>
             </form>
             {progress !== null && (
               <div className="space-y-1">
                 <div className="flex items-center justify-between text-xs text-muted">
                   <span className="truncate">
-                    {progress < 100 ? `Uploading ${uploadName}` : `Processing ${uploadName}…`}
+                    {progress < 100
+                      ? t("files.uploadingName", { name: uploadName })
+                      : t("files.processingName", { name: uploadName })}
                   </span>
                   <span className="tabular-nums">{progress}%</span>
                 </div>
@@ -196,18 +194,18 @@ export function FilesBoard({ initial }: { initial: FileRecord[] }) {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border text-left text-xs font-medium uppercase tracking-wide text-muted-2">
-              <th className="px-4 py-2.5">Name</th>
-              <th className="px-4 py-2.5">Size</th>
-              <th className="px-4 py-2.5">Modified</th>
-              <th className="px-4 py-2.5">Owner</th>
-              <th className="px-4 py-2.5 text-right">Actions</th>
+              <th className="px-4 py-2.5">{t("files.colName")}</th>
+              <th className="px-4 py-2.5">{t("files.colSize")}</th>
+              <th className="px-4 py-2.5">{t("files.colModified")}</th>
+              <th className="px-4 py-2.5">{t("files.colOwner")}</th>
+              <th className="px-4 py-2.5 text-right">{t("files.colActions")}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {files.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-4 py-8 text-center text-sm text-muted">
-                  No files yet. Upload one to get started.
+                  {t("files.empty")}
                 </td>
               </tr>
             ) : (
@@ -235,7 +233,7 @@ export function FilesBoard({ initial }: { initial: FileRecord[] }) {
                     </div>
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <Button variant="ghost" size="xs" type="button" aria-label={`Delete ${f.name}`} onClick={() => remove(f)} disabled={pending}>
+                    <Button variant="ghost" size="xs" type="button" aria-label={t("files.deleteAria", { name: f.name })} onClick={() => remove(f)} disabled={pending}>
                       <Icon name="trash" className="h-3.5 w-3.5" />
                     </Button>
                   </td>

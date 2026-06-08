@@ -74,7 +74,7 @@ export function ShellClient({
       <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} entities={items} />
 
       <div className="flex min-w-0 flex-1 flex-col ">
-        <header className="glass sticky top-0 flex items-center gap-2 border-b border-border px-3 py-2.5 sm:px-4">
+        <header className="glass-strong sticky top-0 z-30 flex items-center gap-2 border-b border-border px-3 py-2.5 sm:px-4">
           <button
             className="rounded-lg p-1.5 text-muted transition-colors hover:bg-surface-2 md:hidden"
             aria-label="Open menu"

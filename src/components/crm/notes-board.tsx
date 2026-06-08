@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { apiFetch, ApiRequestError } from "@/lib/api-client";
+import { useI18n } from "@/lib/i18n/context";
 import { Card, CardBody } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
@@ -18,6 +19,7 @@ export interface NoteRecord {
 
 /** Notes screen backed by the `note` entity (persists to the backend/DB). */
 export function NotesBoard({ initial }: { initial: NoteRecord[] }) {
+  const { t } = useI18n();
   const [notes, setNotes] = useState<NoteRecord[]>(initial);
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -47,14 +49,14 @@ export function NotesBoard({ initial }: { initial: NoteRecord[] }) {
   }
 
   function fail(e: unknown) {
-    toast.error(e instanceof ApiRequestError ? e.message : "Something went wrong");
+    toast.error(e instanceof ApiRequestError ? e.message : t("common.somethingWrong"));
   }
 
   function save() {
-    const t = title.trim();
-    const b = body.trim();
-    if (!t && !b) return;
-    const payload = { title: t || "Untitled", body: b };
+    const trimmedTitle = title.trim();
+    const trimmedBody = body.trim();
+    if (!trimmedTitle && !trimmedBody) return;
+    const payload = { title: trimmedTitle || t("notes.untitled"), body: trimmedBody };
     startTransition(async () => {
       try {
         if (editingId) {
@@ -92,26 +94,26 @@ export function NotesBoard({ initial }: { initial: NoteRecord[] }) {
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-2">
         <div>
-          <h1 className="text-lg font-semibold">Notes</h1>
-          <p className="text-xs text-muted">Jot down ideas and reminders</p>
+          <h1 className="text-lg font-semibold">{t("notes.title")}</h1>
+          <p className="text-xs text-muted">{t("notes.subtitle")}</p>
         </div>
         <Button variant="primary" size="sm" onClick={openNew} disabled={pending}>
           <Icon name="plus" className="h-3.5 w-3.5" />
-          New Note
+          {t("notes.new")}
         </Button>
       </div>
 
       {open && (
         <Card>
           <CardBody className="space-y-3">
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Note title" />
-            <Textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Write something..." />
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t("notes.phTitle")} />
+            <Textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder={t("notes.phBody")} />
             <div className="flex justify-end gap-2">
               <Button variant="secondary" size="sm" onClick={cancel} disabled={pending}>
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button variant="primary" size="sm" onClick={save} disabled={pending}>
-                {editingId ? "Update" : "Save"}
+                {editingId ? t("common.update") : t("common.save")}
               </Button>
             </div>
           </CardBody>
@@ -119,7 +121,7 @@ export function NotesBoard({ initial }: { initial: NoteRecord[] }) {
       )}
 
       {notes.length === 0 && !open ? (
-        <p className="text-sm text-muted">No notes yet. Create your first note.</p>
+        <p className="text-sm text-muted">{t("notes.empty")}</p>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {notes.map((n) => (
@@ -130,14 +132,14 @@ export function NotesBoard({ initial }: { initial: NoteRecord[] }) {
               <div className="absolute right-2 top-2 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                 <button
                   onClick={() => startEdit(n)}
-                  aria-label="Edit note"
+                  aria-label={t("notes.editAria")}
                   className="rounded p-1 text-muted-2 hover:bg-surface-2 hover:text-foreground"
                 >
                   <Icon name="edit" className="h-3.5 w-3.5" />
                 </button>
                 <button
                   onClick={() => remove(n)}
-                  aria-label="Delete note"
+                  aria-label={t("notes.deleteAria")}
                   className="rounded p-1 text-muted-2 hover:bg-surface-2 hover:text-danger"
                 >
                   <Icon name="trash" className="h-3.5 w-3.5" />

@@ -5,15 +5,15 @@ import { useI18n } from "@/lib/i18n/context";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { cn } from "@/lib/utils/cn";
 
-const THEMES: { value: Theme; label: string; hint: string }[] = [
-  { value: "light", label: "Light", hint: "Bright and clean" },
-  { value: "dark", label: "Dark", hint: "Easy on the eyes" },
-  { value: "system", label: "System", hint: "Match your OS" },
+const THEMES: { value: Theme; labelKey: string; hintKey: string }[] = [
+  { value: "light", labelKey: "settings.appearance.themeLight", hintKey: "settings.appearance.themeLightHint" },
+  { value: "dark", labelKey: "settings.appearance.themeDark", hintKey: "settings.appearance.themeDarkHint" },
+  { value: "system", labelKey: "settings.appearance.themeSystem", hintKey: "settings.appearance.themeSystemHint" },
 ];
 const ACCENTS = ["#e11d48", "#2563eb", "#7c3aed", "#059669", "#d97706", "#0891b2"];
-const DENSITIES: { value: string; label: string }[] = [
-  { value: "comfortable", label: "Comfortable" },
-  { value: "compact", label: "Compact" },
+const DENSITIES: { value: string; labelKey: string }[] = [
+  { value: "comfortable", labelKey: "settings.appearance.comfortable" },
+  { value: "compact", labelKey: "settings.appearance.compact" },
 ];
 
 export function AppearanceForm() {
@@ -27,10 +27,10 @@ export function AppearanceForm() {
 
   return (
     <div className="space-y-4">
-      <p className="text-xs text-muted">{t("common.save")} — changes apply instantly and are saved to your account.</p>
+      <p className="text-xs text-muted">{t("settings.appearance.applyHint")}</p>
 
       <Card>
-        <CardHeader title="Theme" />
+        <CardHeader title={t("settings.appearance.theme")} />
         <CardBody>
           <div className="grid gap-3 sm:grid-cols-3">
             {THEMES.map((opt) => (
@@ -50,8 +50,8 @@ export function AppearanceForm() {
                   )}
                 />
                 <span>
-                  <span className="block text-sm font-medium">{opt.label}</span>
-                  <span className="block text-xs text-muted">{opt.hint}</span>
+                  <span className="block text-sm font-medium">{t(opt.labelKey)}</span>
+                  <span className="block text-xs text-muted">{t(opt.hintKey)}</span>
                 </span>
               </button>
             ))}
@@ -61,14 +61,14 @@ export function AppearanceForm() {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
-          <CardHeader title="Accent color" />
+          <CardHeader title={t("settings.appearance.accent")} />
           <CardBody className="flex flex-wrap gap-2">
             {ACCENTS.map((c) => (
               <button
                 key={c}
                 type="button"
                 onClick={() => chooseAccent(c)}
-                aria-label={`Accent ${c}`}
+                aria-label={t("settings.appearance.accentAria", { color: c })}
                 className={cn(
                   "h-8 w-8 rounded-full border-2 transition-transform hover:scale-110",
                   accent === c ? "border-foreground" : "border-border",
@@ -80,7 +80,7 @@ export function AppearanceForm() {
         </Card>
 
         <Card>
-          <CardHeader title="Density" />
+          <CardHeader title={t("settings.appearance.density")} />
           <CardBody>
             <div className="grid gap-3 sm:grid-cols-2">
               {DENSITIES.map((d) => (
@@ -99,7 +99,7 @@ export function AppearanceForm() {
                       density === d.value ? "border-primary bg-primary" : "border-border",
                     )}
                   />
-                  <span className="text-sm font-medium">{d.label}</span>
+                  <span className="text-sm font-medium">{t(d.labelKey)}</span>
                 </button>
               ))}
             </div>

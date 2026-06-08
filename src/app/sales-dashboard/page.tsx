@@ -1,4 +1,5 @@
 import { serverApi } from "@/lib/http/server-api";
+import { getT } from "@/lib/i18n/server";
 import { metadata } from "@/lib/metadata";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Table, TD, TH, THead, TR } from "@/components/ui/table";
@@ -19,6 +20,7 @@ const TONE_COLOR: Record<string, string> = {
 const usd = (n: number) => "$" + Math.round(n).toLocaleString();
 
 export default async function SalesDashboardPage() {
+  const t = await getT();
   const dealEntity = metadata.getEntity("deal");
   const stageField = dealEntity.fields.find((f) => f.name === "stage")!;
   const nameField = dealEntity.fields.find((f) => f.name === "name")!;
@@ -74,17 +76,17 @@ export default async function SalesDashboardPage() {
     .filter((d) => d.value > 0);
 
   const stats = [
-    { label: "Total Pipeline", value: usd(openPipeline) },
-    { label: "Won", value: usd(wonValue) },
-    { label: "Open Deals", value: String(openCount) },
-    { label: "Win Rate", value: `${winRate}%` },
+    { label: t("salesDash.kpi.totalPipeline"), value: usd(openPipeline) },
+    { label: t("salesDash.kpi.won"), value: usd(wonValue) },
+    { label: t("salesDash.kpi.openDeals"), value: String(openCount) },
+    { label: t("salesDash.kpi.winRate"), value: `${winRate}%` },
   ];
 
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-lg font-semibold">Sales Dashboard</h1>
-        <p className="text-xs text-muted">Pipeline health and revenue performance.</p>
+        <h1 className="text-lg font-semibold">{t("salesDash.title")}</h1>
+        <p className="text-xs text-muted">{t("salesDash.subtitle")}</p>
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -100,13 +102,13 @@ export default async function SalesDashboardPage() {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
-          <CardHeader title="Pipeline value by stage" />
+          <CardHeader title={t("salesDash.pipelineByStage")} />
           <CardBody>
             <PipelineBarChart data={pipelineData} />
           </CardBody>
         </Card>
         <Card>
-          <CardHeader title="Deals by stage" />
+          <CardHeader title={t("salesDash.dealsByStage")} />
           <CardBody>
             <StageDonut data={distributionData} />
           </CardBody>
@@ -114,13 +116,13 @@ export default async function SalesDashboardPage() {
       </div>
 
       <Card>
-        <CardHeader title="Top deals by amount" />
+        <CardHeader title={t("salesDash.topDealsByAmount")} />
         <Table>
           <THead>
             <tr>
-              <TH>Deal</TH>
-              <TH>Stage</TH>
-              <TH>Amount</TH>
+              <TH>{t("col.deal")}</TH>
+              <TH>{t("col.stage")}</TH>
+              <TH>{t("col.amount")}</TH>
             </tr>
           </THead>
           <tbody>
@@ -139,7 +141,7 @@ export default async function SalesDashboardPage() {
             ))}
             {deals.length === 0 && (
               <TR>
-                <TD>No deals.</TD>
+                <TD>{t("salesDash.noDeals")}</TD>
               </TR>
             )}
           </tbody>

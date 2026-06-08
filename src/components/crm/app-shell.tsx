@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { metadata } from "@/lib/metadata";
-import { screenKeyForPath } from "@/lib/config/screens";
+import { screenKeyForPath, screenCatalog } from "@/lib/config/screens";
 import { serverApi } from "@/lib/http/server-api";
 import { getLocale } from "@/lib/i18n/server";
 import { entityLabel } from "@/lib/i18n/labels";
@@ -31,6 +31,10 @@ const NAV_EXTRAS: NavItem[] = [
   // Note: the dashboard screens (sales/leads/deals/project/executive/revenue/growth)
   // are no longer listed here — they surface as cards on the home Pano
   // (see DashboardCards). Their routes + screen-access are unchanged.
+  { name: "pos", pluralLabel: "Point of Sale", icon: "pos", group: "sales", href: "/pos" },
+  { name: "stock-levels", pluralLabel: "Stock Levels", icon: "stock", group: "inventory", href: "/stock-levels" },
+  { name: "label-designer", pluralLabel: "Label Designer", icon: "label", group: "inventory", href: "/label-designer" },
+  { name: "labels", pluralLabel: "Label Printing", icon: "printer", group: "inventory", href: "/labels/print" },
   { name: "calendar", pluralLabel: "Calendar", icon: "calendar", group: "crm", href: "/calendar" },
   { name: "activity", pluralLabel: "Activity", icon: "activity", group: "crm", href: "/activity" },
   { name: "pipeline", pluralLabel: "Pipeline", icon: "pipeline", group: "sales", href: "/pipeline" },
@@ -62,8 +66,14 @@ export async function AppShell({ children }: { children: ReactNode }) {
 
   const collapsed = (await cookies()).get("aula_sidebar")?.value === "1";
   const locale = await getLocale();
+  // Admins always see every screen (current + any newly added), independent of
+  // the screens stored on their position — so new features surface without a
+  // re-seed. Non-admins are gated by their position's granted screens.
   // "home" (the dashboard) is always reachable so users land somewhere.
-  const allowed = new Set<string>([...me.screens, "home"]);
+  const isAdmin = me.roles?.includes("admin");
+  const allowed = isAdmin
+    ? new Set<string>([...screenCatalog(metadata).map((s) => s.key), "home"])
+    : new Set<string>([...me.screens, "home"]);
 
   // `task` is intentionally kept out of the nav: the generic Tasks screen overlaps
   // with To Do, so it's hidden here. The entity itself stays registered so the

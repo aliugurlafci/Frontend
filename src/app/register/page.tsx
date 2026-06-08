@@ -4,15 +4,17 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Eye, EyeOff, Mail } from "lucide-react";
+import { useI18n } from "@/lib/i18n/context";
 import { AuthLayout, AUTH_FIELD, AUTH_BUTTON } from "@/components/ui/auth-layout";
 
 export default function RegisterPage() {
   const router = useRouter();
+  const { t } = useI18n();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
 
   return (
-    <AuthLayout title="Create an Account" subtitle="Join the Aula CRM platform in just a few steps.">
+    <AuthLayout title={t("auth.register.title")} subtitle={t("auth.register.subtitle")}>
       <form
         className="mt-7 space-y-5"
         onSubmit={(e) => {
@@ -23,7 +25,7 @@ export default function RegisterPage() {
         {/* Name */}
         <div>
           <label htmlFor="name" className="mb-1.5 block text-sm font-semibold">
-            Name
+            {t("auth.register.name")}
           </label>
           <input id="name" type="text" placeholder="Avery Admin" className={AUTH_FIELD} />
         </div>
@@ -31,7 +33,7 @@ export default function RegisterPage() {
         {/* Email */}
         <div>
           <label htmlFor="email" className="mb-1.5 block text-sm font-semibold">
-            Email Address
+            {t("auth.emailAddress")}
           </label>
           <div className="relative">
             <input id="email" type="email" placeholder="you@example.com" className={`${AUTH_FIELD} pr-10`} />
@@ -42,7 +44,7 @@ export default function RegisterPage() {
         {/* Password */}
         <div>
           <label htmlFor="password" className="mb-1.5 block text-sm font-semibold">
-            Password
+            {t("auth.password")}
           </label>
           <div className="relative">
             <input
@@ -54,7 +56,7 @@ export default function RegisterPage() {
             <button
               type="button"
               onClick={() => setShowPassword((s) => !s)}
-              aria-label={showPassword ? "Hide password" : "Show password"}
+              aria-label={showPassword ? t("auth.hidePassword") : t("auth.showPassword")}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-2 hover:text-foreground"
             >
               {showPassword ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
@@ -65,7 +67,7 @@ export default function RegisterPage() {
         {/* Confirm Password */}
         <div>
           <label htmlFor="confirm" className="mb-1.5 block text-sm font-semibold">
-            Confirm Password
+            {t("auth.register.confirm")}
           </label>
           <div className="relative">
             <input
@@ -77,7 +79,7 @@ export default function RegisterPage() {
             <button
               type="button"
               onClick={() => setShowConfirm((s) => !s)}
-              aria-label={showConfirm ? "Hide password" : "Show password"}
+              aria-label={showConfirm ? t("auth.hidePassword") : t("auth.showPassword")}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-2 hover:text-foreground"
             >
               {showConfirm ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
@@ -88,25 +90,25 @@ export default function RegisterPage() {
         {/* Terms */}
         <label className="flex items-center gap-2 text-sm text-foreground">
           <input type="checkbox" defaultChecked className="h-4 w-4 rounded border-border accent-primary" />
-          I agree to the terms and conditions
+          {t("auth.register.terms")}
         </label>
 
         <button type="submit" className={AUTH_BUTTON}>
-          Sign Up
+          {t("auth.register.signUp")}
         </button>
       </form>
 
       <p className="mt-5 text-sm text-muted">
-        Already have an account?{" "}
+        {t("auth.register.haveAccount")}{" "}
         <Link href="/login" className="font-semibold text-secondary hover:underline">
-          Sign In
+          {t("login.signIn")}
         </Link>
       </p>
 
       {/* Divider */}
       <div className="my-6 flex items-center gap-3 text-xs font-medium text-muted-2">
         <span className="h-px flex-1 bg-border" />
-        OR
+        {t("auth.or")}
         <span className="h-px flex-1 bg-border" />
       </div>
 
@@ -115,21 +117,21 @@ export default function RegisterPage() {
         <button
           type="button"
           className="flex h-11 items-center justify-center rounded-xl bg-[#1877f2] text-white shadow-sm transition-all hover:brightness-110"
-          aria-label="Continue with Facebook"
+          aria-label={t("auth.continueFacebook")}
         >
           <span className="text-lg font-bold">f</span>
         </button>
         <button
           type="button"
           className="flex h-11 items-center justify-center rounded-xl border border-border-strong bg-surface/60 backdrop-blur-sm transition-colors hover:bg-surface-2"
-          aria-label="Continue with Google"
+          aria-label={t("auth.continueGoogle")}
         >
           <span className="text-lg font-bold text-[#ea4335]">G</span>
         </button>
         <button
           type="button"
           className="flex h-11 items-center justify-center rounded-xl bg-black text-white shadow-sm transition-all hover:brightness-125"
-          aria-label="Continue with Apple"
+          aria-label={t("auth.continueApple")}
         >
           <span className="text-lg"></span>
         </button>

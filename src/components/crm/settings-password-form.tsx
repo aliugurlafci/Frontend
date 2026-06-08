@@ -17,26 +17,26 @@ export function PasswordForm() {
 
   async function save() {
     if (!current || !next) {
-      toast.error("Fill in all password fields");
+      toast.error(t("settings.password.errFill"));
       return;
     }
     if (next.length < 6) {
-      toast.error("New password must be at least 6 characters");
+      toast.error(t("settings.password.errLen"));
       return;
     }
     if (next !== confirm) {
-      toast.error("New passwords don't match");
+      toast.error(t("settings.password.errMatch"));
       return;
     }
     setBusy(true);
     try {
       await apiFetch("/auth/password", { method: "PATCH", body: { currentPassword: current, newPassword: next } });
-      toast.success("Password updated");
+      toast.success(t("settings.password.updated"));
       setCurrent("");
       setNext("");
       setConfirm("");
     } catch (e) {
-      toast.error(e instanceof ApiRequestError ? e.message : "Update failed");
+      toast.error(e instanceof ApiRequestError ? e.message : t("settings.password.updateFailed"));
     } finally {
       setBusy(false);
     }
@@ -44,19 +44,19 @@ export function PasswordForm() {
 
   return (
     <Card>
-      <CardHeader title="Change password" />
+      <CardHeader title={t("settings.password.title")} />
       <CardBody className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
-            <Label htmlFor="current">Current password</Label>
+            <Label htmlFor="current">{t("settings.password.current")}</Label>
             <Input id="current" type="password" value={current} onChange={(e) => setCurrent(e.target.value)} placeholder="••••••••" />
           </div>
           <div>
-            <Label htmlFor="new">New password</Label>
+            <Label htmlFor="new">{t("settings.password.new")}</Label>
             <Input id="new" type="password" value={next} onChange={(e) => setNext(e.target.value)} placeholder="••••••••" />
           </div>
           <div>
-            <Label htmlFor="confirm">Confirm new password</Label>
+            <Label htmlFor="confirm">{t("settings.password.confirm")}</Label>
             <Input id="confirm" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="••••••••" />
           </div>
         </div>

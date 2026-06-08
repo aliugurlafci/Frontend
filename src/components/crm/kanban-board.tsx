@@ -4,6 +4,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import type { EntityDef, EntityRecord } from "@/lib/metadata/types";
 import { apiFetch } from "@/lib/api-client";
+import { useI18n } from "@/lib/i18n/context";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils/cn";
 import { enumTone, formatValue } from "./field-format";
@@ -24,6 +25,7 @@ export function KanbanBoard({
   onMoved: () => void;
   onCardClick: (id: string) => void;
 }) {
+  const { t } = useI18n();
   const groupField = entity.board!.groupByField;
   const field = entity.fields.find((f) => f.name === groupField)!;
   const stages = field.options ?? [];
@@ -41,7 +43,7 @@ export function KanbanBoard({
     if (fromStage === toStage) return;
     const transition = entity.lifecycle?.transitions.find((t) => t.from === fromStage && t.to === toStage);
     if (!transition) {
-      toast.error(`Can't move ${fromStage} → ${toStage}`);
+      toast.error(t("kanban.cantMove", { from: fromStage, to: toStage }));
       return;
     }
     try {
@@ -49,7 +51,7 @@ export function KanbanBoard({
         method: "POST",
         body: { action: transition.action },
       });
-      toast.success(`Moved to ${toStage}`);
+      toast.success(t("kanban.movedTo", { stage: toStage }));
       onMoved();
     } catch (e) {
       toast.error((e as Error).message);
@@ -100,7 +102,7 @@ export function KanbanBoard({
                   )}
                 </button>
               ))}
-              {cards.length === 0 && <p className="px-1 py-2 text-xs text-muted-2">Drop here</p>}
+              {cards.length === 0 && <p className="px-1 py-2 text-xs text-muted-2">{t("kanban.dropHere")}</p>}
             </div>
           </div>
         );

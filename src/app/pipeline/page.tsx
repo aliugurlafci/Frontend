@@ -1,6 +1,7 @@
 import { metadata } from "@/lib/metadata";
 import { getServerContext } from "@/lib/http/server-context";
 import { serverApi } from "@/lib/http/server-api";
+import { getT } from "@/lib/i18n/server";
 import { permissionEngine } from "@/lib/permissions/engine";
 import { EntityView } from "@/components/crm/entity-view";
 
@@ -11,6 +12,7 @@ const EMPTY = { items: [], total: 0, page: 1, pageSize: 25, pageCount: 1 };
 export default async function PipelinePage() {
   const def = metadata.getEntity("deal");
   const ctx = await getServerContext();
+  const t = await getT();
 
   let initial = EMPTY as Awaited<ReturnType<typeof serverApi.list>>;
   try {
@@ -26,8 +28,8 @@ export default async function PipelinePage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-lg font-semibold">Pipeline</h1>
-        <p className="text-xs text-muted">Deals by stage</p>
+        <h1 className="text-lg font-semibold">{t("pipeline.title")}</h1>
+        <p className="text-xs text-muted">{t("pipeline.subtitle")}</p>
       </div>
       <EntityView
         entity={def}

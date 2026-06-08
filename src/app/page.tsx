@@ -1,5 +1,6 @@
 import { getServerContext } from "@/lib/http/server-context";
 import { serverApi } from "@/lib/http/server-api";
+import { getT } from "@/lib/i18n/server";
 import { metadata } from "@/lib/metadata";
 import type { AggregateRow, Measure } from "@/lib/data/query";
 import type { EntityRecord } from "@/lib/metadata/types";
@@ -49,6 +50,7 @@ const sumMeasure = (rows: AggregateRow[], key: string) => rows.reduce((s, r) => 
 
 export default async function DashboardPage() {
   const ctx = await getServerContext();
+  const t = await getT();
   const dealEntity = metadata.getEntity("deal");
   const stageField = dealEntity.fields.find((f) => f.name === "stage")!;
   const nameField = dealEntity.fields.find((f) => f.name === "name")!;
@@ -121,24 +123,24 @@ export default async function DashboardPage() {
   const branchName = new Map(branches.map((b) => [String(b.id), String(b.name ?? b.code ?? "—")]));
   const stockBranchData: ChartDatum[] = stockByBranch
     .map((r, i) => ({
-      label: r.key ? branchName.get(String(r.key)) ?? "—" : "Unassigned",
+      label: r.key ? branchName.get(String(r.key)) ?? "—" : t("dash.unassigned"),
       value: Math.round(r.measures.value ?? 0),
       color: CHART_PALETTE[i % CHART_PALETTE.length],
     }))
     .filter((d) => d.value > 0);
 
   const stats = [
-    { label: "Invoiced", value: usd.format(invoiced) },
-    { label: "Outstanding AR", value: usd.format(arOutstanding) },
-    { label: "Inventory value", value: usd.format(inventoryValue) },
-    { label: "Cash collected", value: usd.format(cashCollected) },
+    { label: t("dash.kpi.invoiced"), value: usd.format(invoiced) },
+    { label: t("dash.kpi.outstandingAr"), value: usd.format(arOutstanding) },
+    { label: t("dash.kpi.inventoryValue"), value: usd.format(inventoryValue) },
+    { label: t("dash.kpi.cashCollected"), value: usd.format(cashCollected) },
   ];
 
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-        <p className="mt-0.5 text-sm text-muted">Welcome back, {ctx.displayName}.</p>
+        <h1 className="text-2xl font-bold tracking-tight">{t("dash.title")}</h1>
+        <p className="mt-0.5 text-sm text-muted">{t("dash.welcome", { name: ctx.displayName })}</p>
       </div>
 
       <DashboardCards />
@@ -157,17 +159,17 @@ export default async function DashboardPage() {
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
-          <CardHeader title="Invoiced revenue by status" />
+          <CardHeader title={t("dash.invoicedByStatus")} />
           <CardBody>
             {invStatusData.length ? (
               <PipelineBarChart data={invStatusData} kind="currency" />
             ) : (
-              <EmptyChart />
+              <EmptyChart label={t("dash.noData")} />
             )}
           </CardBody>
         </Card>
         <Card>
-          <CardHeader title="Stock value by branch" />
+          <CardHeader title={t("dash.stockByBranch")} />
           <CardBody>
             {stockBranchData.length ? (
               <>
@@ -175,7 +177,7 @@ export default async function DashboardPage() {
                 <ChartLegend data={stockBranchData} kind="currency" />
               </>
             ) : (
-              <EmptyChart />
+              <EmptyChart label={t("dash.noData")} />
             )}
           </CardBody>
         </Card>
@@ -183,15 +185,15 @@ export default async function DashboardPage() {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
-          <CardHeader title="Top products by stock value" />
+          <CardHeader title={t("dash.topProducts")} />
           <CardBody>
-            {topProducts.length ? <HBarChart data={topProducts} kind="currency" /> : <EmptyChart />}
+            {topProducts.length ? <HBarChart data={topProducts} kind="currency" /> : <EmptyChart label={t("dash.noData")} />}
           </CardBody>
         </Card>
         <Card>
-          <CardHeader title="Open pipeline by stage" />
+          <CardHeader title={t("dash.openPipeline")} />
           <CardBody>
-            {pipelineData.length ? <PipelineBarChart data={pipelineData} kind="currency" /> : <EmptyChart />}
+            {pipelineData.length ? <PipelineBarChart data={pipelineData} kind="currency" /> : <EmptyChart label={t("dash.noData")} />}
           </CardBody>
         </Card>
       </div>
@@ -199,15 +201,15 @@ export default async function DashboardPage() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader
-            title="Top deals"
-            action={<span className="text-xs text-muted">Open {usd.format(openPipeline)}</span>}
+            title={t("dash.topDeals")}
+            action={<span className="text-xs text-muted">{t("dash.open", { amount: usd.format(openPipeline) })}</span>}
           />
           <Table>
             <THead>
               <tr>
-                <TH>Deal</TH>
-                <TH>Stage</TH>
-                <TH>Amount</TH>
+                <TH>{t("col.deal")}</TH>
+                <TH>{t("col.stage")}</TH>
+                <TH>{t("col.amount")}</TH>
               </tr>
             </THead>
             <tbody>
@@ -226,7 +228,7 @@ export default async function DashboardPage() {
               ))}
               {deals.items.length === 0 && (
                 <TR>
-                  <TD>No deals yet.</TD>
+                  <TD>{t("dash.noDeals")}</TD>
                 </TR>
               )}
             </tbody>
@@ -234,7 +236,7 @@ export default async function DashboardPage() {
         </Card>
 
         <Card>
-          <CardHeader title="Recent activity" />
+          <CardHeader title={t("dash.recentActivity")} />
           <CardBody>
             <ol className="space-y-2.5 border-l border-border pl-3">
               {activity.map((a) => (
@@ -245,7 +247,7 @@ export default async function DashboardPage() {
                   <div className="text-muted">{new Date(a.at).toLocaleString()}</div>
                 </li>
               ))}
-              {activity.length === 0 && <li className="text-xs text-muted">No activity yet.</li>}
+              {activity.length === 0 && <li className="text-xs text-muted">{t("dash.noActivity")}</li>}
             </ol>
           </CardBody>
         </Card>
@@ -254,6 +256,6 @@ export default async function DashboardPage() {
   );
 }
 
-function EmptyChart() {
-  return <div className="flex h-[240px] items-center justify-center text-xs text-muted">No data to display.</div>;
+function EmptyChart({ label }: { label: string }) {
+  return <div className="flex h-[240px] items-center justify-center text-xs text-muted">{label}</div>;
 }

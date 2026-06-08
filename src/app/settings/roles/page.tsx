@@ -1,4 +1,8 @@
 import { serverApi } from "@/lib/http/server-api";
+import { metadata } from "@/lib/metadata";
+import { getLocale } from "@/lib/i18n/server";
+import { entityLabel } from "@/lib/i18n/labels";
+import { t } from "@/lib/i18n/messages";
 import { PositionsAdmin, type PositionRecord } from "@/components/crm/positions-admin";
 import { Card, CardBody } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -16,7 +20,23 @@ function parseScreens(v: unknown): string[] {
 
 export default async function PositionsPage() {
   try {
+    const locale = await getLocale();
     const [page, screens] = await Promise.all([serverApi.list("position", { pageSize: 100 }), serverApi.screens()]);
+
+    // Localize each screen's label (entity screens → entity plural label; extra
+    // screens → nav.* key) and build a localized group-header map, so a Turkish
+    // admin sees meaningful names when granting access.
+    const entityByName = new Map(metadata.listEntities().map((e) => [e.name, e]));
+    const localizedScreens = screens.map((s) => {
+      const entity = entityByName.get(s.key);
+      if (entity) return { ...s, label: entityLabel(entity, locale, { plural: true }) };
+      const navKey = `nav.${s.key}`;
+      const navLabel = t(locale, navKey);
+      return { ...s, label: navLabel === navKey ? s.label : navLabel };
+    });
+    const groupLabels: Record<string, string> = {};
+    for (const s of localizedScreens) groupLabels[s.group] ??= t(locale, `group.${s.group}`);
+
     const positions: PositionRecord[] = page.items.map((p) => ({
       id: p.id,
       name: String(p.name ?? ""),
@@ -25,12 +45,17 @@ export default async function PositionsPage() {
       screens: parseScreens(p.screens),
       version: p.version,
     }));
-    return <PositionsAdmin initial={positions} screens={screens} />;
+    return <PositionsAdmin initial={positions} screens={localizedScreens} groupLabels={groupLabels} />;
   } catch {
+    const locale = await getLocale();
     return (
       <Card>
         <CardBody>
-          <EmptyState icon="shield" title="Administrators only" description="You need an admin position to manage positions & screen access." />
+          <EmptyState
+            icon="shield"
+            title={t(locale, "settings.users.adminsOnly")}
+            description={t(locale, "settings.roles.adminsOnlyDesc")}
+          />
         </CardBody>
       </Card>
     );

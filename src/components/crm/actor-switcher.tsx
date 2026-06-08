@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useI18n } from "@/lib/i18n/context";
 import { Select } from "@/components/ui/input";
 
 const ACTORS = [
@@ -14,11 +15,12 @@ const ACTORS = [
  *  server and client see the new role (illustrates RBAC/ABAC differences). */
 export function ActorSwitcher({ current }: { current: string }) {
   const router = useRouter();
+  const { t } = useI18n();
   return (
     <label className="flex items-center gap-2 text-xs text-muted">
-      <span className="hidden sm:inline">Viewing as</span>
+      <span className="hidden sm:inline">{t("actor.viewingAs")}</span>
       <Select
-        aria-label="Switch demo persona"
+        aria-label={t("actor.switch")}
         value={current}
         className="h-8 w-40"
         onChange={(e) => {
