@@ -24,6 +24,8 @@ function LoginForm() {
   const [email, setEmail] = useState("avery@acme.test");
   const [password, setPassword] = useState(DEMO_PASSWORD);
   const [showPassword, setShowPassword] = useState(false);
+  const [twoFactor, setTwoFactor] = useState(false);
+  const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -32,7 +34,16 @@ function LoginForm() {
     setError(null);
     setBusy(true);
     try {
-      await apiFetch("/auth/login", { method: "POST", body: { email, password } });
+      const res = await apiFetch<{ twoFactorRequired?: boolean }>("/auth/login", {
+        method: "POST",
+        body: { email, password, code: twoFactor ? code : undefined },
+      });
+      if (res?.twoFactorRequired) {
+        // Password OK — prompt for the authenticator code and re-submit.
+        setTwoFactor(true);
+        setBusy(false);
+        return;
+      }
       router.push(next.startsWith("/") ? next : "/");
       router.refresh();
     } catch (err) {
@@ -85,6 +96,26 @@ function LoginForm() {
           </div>
         </div>
 
+        {twoFactor && (
+          <div>
+            <label htmlFor="code" className="mb-1.5 block text-sm font-semibold">
+              {t("login.twoFactorCode")}
+            </label>
+            <input
+              id="code"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={6}
+              value={code}
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+              autoFocus
+              placeholder="123456"
+              className={`${AUTH_FIELD} tracking-[0.3em]`}
+            />
+            <p className="mt-1.5 text-xs text-muted-2">{t("login.twoFactorHint")}</p>
+          </div>
+        )}
+
         {error && (
           <p className="rounded-xl border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger backdrop-blur-sm">
             {error}
@@ -92,7 +123,7 @@ function LoginForm() {
         )}
 
         <button type="submit" disabled={busy} className={AUTH_BUTTON}>
-          {busy ? t("login.signingIn") : t("login.signIn")}
+          {busy ? t("login.signingIn") : twoFactor ? t("login.verify") : t("login.signIn")}
         </button>
       </form>
 

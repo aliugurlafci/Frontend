@@ -12,6 +12,12 @@ function toEmail(r: Record<string, unknown>): EmailRecord {
   return {
     id: String(r.id),
     folder: (r.folder as FolderId) ?? "inbox",
+    // These MUST be mapped here too — the server-rendered initial state is what a
+    // page refresh shows, and without them a moved/starred message renders in its
+    // base folder until something triggers a client reload.
+    folderId: r.folderId ? String(r.folderId) : null,
+    starred: Boolean(r.starred),
+    messageId: r.messageId ? String(r.messageId) : "",
     sender: String(r.sender ?? ""),
     subject: String(r.subject ?? ""),
     body: String(r.preview ?? ""), // preview in the list; full text fetched lazily on open

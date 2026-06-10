@@ -6,6 +6,7 @@
  */
 import type { RequestContext } from "@/lib/context/types";
 import type { EntityDef } from "@/lib/metadata/types";
+import { metadata } from "@/lib/metadata";
 import { DecisionCache } from "./cache";
 import {
   canManageAny,
@@ -17,6 +18,42 @@ import type { AccessRequest, Decision } from "./types";
 
 function allow(reason: string): Decision {
   return { allowed: true, reason, code: "allowed" };
+}
+
+/**
+ * Direct grant for `action`, then up the master-detail parent chain: a child/line
+ * entity inherits its parent document's grants (line entities are hidden from the
+ * permission matrix and only exist within their parent document).
+ */
+function rbacDirect(grants: Set<string>, entity: string, action: string): boolean {
+  if ([...grants].some((g) => grantMatches(g, action))) return true;
+  const verb = action.split(":")[1] ?? "";
+  let parent = metadata.findEntity?.(entity)?.parent?.entity;
+  const seen = new Set<string>([entity]);
+  while (parent && !seen.has(parent)) {
+    seen.add(parent);
+    if ([...grants].some((g) => grantMatches(g, `${parent}:${verb}`))) return true;
+    parent = metadata.findEntity?.(parent)?.parent?.entity;
+  }
+  return false;
+}
+
+/**
+ * Full RBAC: direct/parent grant, plus — for reads only — reference-display
+ * inheritance: a read is allowed when an entity the caller can already read
+ * references this one (so a screen can resolve its referenced records' names).
+ * Bounded to non-system targets, one hop deep — mirrors the backend engine.
+ */
+function rbacAllows(grants: Set<string>, entity: string, action: string): boolean {
+  if (rbacDirect(grants, entity, action)) return true;
+  if ((action.split(":")[1] ?? "") !== "read") return false;
+  const target = metadata.findEntity?.(entity);
+  if (!target || target.system) return false;
+  return metadata.listEntities().some(
+    (def) =>
+      def.fields.some((f) => f.type === "reference" && f.referenceEntity === entity) &&
+      rbacDirect(grants, def.name, `${def.name}:read`),
+  );
 }
 
 function ownershipRelation(ctx: RequestContext, req: AccessRequest): string {
@@ -31,8 +68,11 @@ export class PermissionEngine {
   evaluate(ctx: RequestContext, req: AccessRequest): Decision {
     if (ctx.isSystem) return allow("system context bypasses checks");
 
+    // Key on the effective grant set (or roles when none) so a grant change is
+    // never served a stale decision; userId stays in the key for ownership ABAC.
+    const grantSig = ctx.grants ? [...ctx.grants].sort().join(",") : [...ctx.roles].sort().join(",");
     const key = [
-      [...ctx.roles].sort().join(","),
+      grantSig,
       ctx.userId,
       req.action,
       req.field ?? "",
@@ -49,11 +89,13 @@ export class PermissionEngine {
   }
 
   private compute(ctx: RequestContext, req: AccessRequest): Decision {
-    const grants = grantsFor(ctx.roles);
+    // Prefer the principal's effective grants (matrix-authoritative, from
+    // /auth/me) so custom per-position grants gate the UI exactly as the backend
+    // enforces them; fall back to role presets when no grant list is carried.
+    const grants = ctx.grants ? new Set(ctx.grants) : grantsFor(ctx.roles);
 
-    // 1. RBAC — object/action level.
-    const rbacOk = [...grants].some((g) => grantMatches(g, req.action));
-    if (!rbacOk) {
+    // 1. RBAC — object/action level (with master-detail + reference inheritance).
+    if (!rbacAllows(grants, req.entity, req.action)) {
       return {
         allowed: false,
         code: "rbac_denied",

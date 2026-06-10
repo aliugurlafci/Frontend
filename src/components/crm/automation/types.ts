@@ -22,6 +22,8 @@ export interface AutomationTrigger {
   entity?: string;
   event?: TriggerEvent;
   schedule?: string;
+  /** For `schedule: "minutely"` — run every N minutes. */
+  everyMinutes?: number;
   inactivityDays?: number;
   webhookEvent?: string;
 }
@@ -80,6 +82,8 @@ export interface AutomationAction {
   entity?: string;
   field?: string;
   value?: string;
+  /** create_record — multiple field assignments for the new record. */
+  assignments?: { field: string; value: string }[];
   stage?: string;
   url?: string;
   delayMinutes?: number;
@@ -196,6 +200,7 @@ export interface AutomationSettings {
   timezone: string;
   maxRetries: number;
   rateLimitPerMin: number;
+  maxConcurrent: number;
   aiLeadScoring: boolean;
   aiNextBestAction: boolean;
   aiSmartAssignment: boolean;
@@ -246,6 +251,29 @@ export interface AutomationStatsResponse {
 export interface CatalogUser {
   id: string;
   displayName: string;
+}
+
+/** A live snapshot of automation activity (polled by the Automations screen). */
+export interface LivePulse {
+  ruleId: string;
+  ruleName: string;
+  status: RunStatus;
+  at: string;
+  durationMs: number;
+  test: boolean;
+}
+export interface LiveActivity {
+  running: string[];
+  recent: LivePulse[];
+}
+
+/** Result of draining the processing queue. */
+export interface QueueDrainResult {
+  processed: number;
+  succeeded: number;
+  failed: number;
+  dead: number;
+  remaining: number;
 }
 
 /** Action-type → icon name + tone helpers shared across the console. */

@@ -6,7 +6,6 @@ import { apiFetch } from "@/lib/api-client";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import { Icon } from "@/components/ui/icon";
 import { Select } from "@/components/ui/input";
 import { Drawer } from "@/components/ui/drawer";
@@ -16,6 +15,7 @@ import { cn } from "@/lib/utils/cn";
 import { useI18n } from "@/lib/i18n/context";
 import type { AutomationRun } from "./types";
 import { RUN_TONE } from "./types";
+import { Skeleton } from "./anim";
 
 const STEP_TONE: Record<string, string> = {
   ok: "text-success",
@@ -70,9 +70,11 @@ export function LogsTab() {
       </div>
 
       {!runs ? (
-        <div className="flex items-center gap-2 p-8 text-sm text-muted">
-          <Spinner /> {t("auto.loading")}
-        </div>
+        <Card className="space-y-2 p-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-9" />
+          ))}
+        </Card>
       ) : runs.length === 0 ? (
         <Card>
           <EmptyState icon="activity" title={t("auto.logs.empty.title")} description={t("auto.logs.empty.desc")} />
@@ -92,7 +94,7 @@ export function LogsTab() {
             </THead>
             <tbody>
               {runs.map((run) => (
-                <TR key={run.id} onClick={() => setSelected(run)}>
+                <TR key={run.id} onClick={() => setSelected(run)} className="animate-rise">
                   <TD>
                     <Badge tone={RUN_TONE[run.status]}>{run.status}</Badge>
                   </TD>
@@ -141,11 +143,11 @@ export function LogsTab() {
               <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-2">{t("auto.logs.stepTrace")}</p>
               <ol className="space-y-2 border-l border-border pl-4">
                 {selected.steps.map((step, i) => (
-                  <li key={i} className="relative text-sm">
+                  <li key={i} className="animate-rise relative text-sm" style={{ animationDelay: `${i * 70}ms` }}>
                     <span
                       className={cn(
-                        "absolute -left-[1.3rem] top-1 h-2 w-2 rounded-full",
-                        step.status === "ok" ? "bg-success" : step.status === "failed" ? "bg-danger" : "bg-muted-2",
+                        "absolute -left-[1.36rem] top-1 h-2.5 w-2.5 rounded-full ring-2 ring-surface",
+                        step.status === "ok" ? "bg-success" : step.status === "failed" ? "bg-danger animate-soft-pulse" : "bg-muted-2",
                       )}
                     />
                     <div className="flex items-center justify-between gap-2">

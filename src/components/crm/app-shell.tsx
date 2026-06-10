@@ -32,21 +32,21 @@ const NAV_EXTRAS: NavItem[] = [
   // are no longer listed here — they surface as cards on the home Pano
   // (see DashboardCards). Their routes + screen-access are unchanged.
   { name: "pos", pluralLabel: "Point of Sale", icon: "pos", group: "sales", href: "/pos" },
+  { name: "cart", pluralLabel: "Cart", icon: "cart", group: "sales", href: "/cart" },
+  { name: "salesReturn", pluralLabel: "Sales Returns", icon: "return", group: "sales", href: "/salesReturn" },
   { name: "stock-levels", pluralLabel: "Stock Levels", icon: "stock", group: "inventory", href: "/stock-levels" },
   { name: "label-designer", pluralLabel: "Label Designer", icon: "label", group: "inventory", href: "/label-designer" },
   { name: "labels", pluralLabel: "Label Printing", icon: "printer", group: "inventory", href: "/labels/print" },
-  { name: "calendar", pluralLabel: "Calendar", icon: "calendar", group: "crm", href: "/calendar" },
-  { name: "activity", pluralLabel: "Activity", icon: "activity", group: "crm", href: "/activity" },
   { name: "pipeline", pluralLabel: "Pipeline", icon: "pipeline", group: "sales", href: "/pipeline" },
   { name: "email", pluralLabel: "Email", icon: "email", group: "comms", href: "/email" },
-  { name: "chat", pluralLabel: "Chat", icon: "chat", group: "comms", href: "/chat" },
-  { name: "calls", pluralLabel: "Calls", icon: "call", group: "comms", href: "/calls" },
+  { name: "calendar", pluralLabel: "Calendar", icon: "calendar", group: "comms", href: "/calendar" },
   { name: "file-manager", pluralLabel: "Files", icon: "file", group: "comms", href: "/file-manager" },
   { name: "todo", pluralLabel: "To Do", icon: "todo", group: "comms", href: "/todo" },
   { name: "notes", pluralLabel: "Notes", icon: "note", group: "comms", href: "/notes" },
   { name: "reports", pluralLabel: "Reports", icon: "reports", group: "finance", href: "/reports" },
   { name: "finance", pluralLabel: "Finance", icon: "finance", group: "finance", href: "/finance" },
   { name: "automation", pluralLabel: "Automation", icon: "recurring", group: "admin", href: "/automation" },
+  { name: "activity", pluralLabel: "Activity", icon: "activity", group: "admin", href: "/activity" },
   { name: "settings", pluralLabel: "Settings", icon: "settings", group: "admin", href: "/settings" },
 ];
 
@@ -91,8 +91,16 @@ export async function AppShell({ children }: { children: ReactNode }) {
   const currentScreen = screenKeyForPath(pathname);
   const denied = !allowed.has(currentScreen);
 
+  const avatarUrl = me.avatarId ? `/api/v1/files/${encodeURIComponent(me.avatarId)}/download?inline=1` : undefined;
+
   return (
-    <ShellClient items={items} displayName={me.displayName} initialCollapsed={collapsed}>
+    <ShellClient
+      items={items}
+      displayName={me.displayName}
+      avatarUrl={avatarUrl}
+      initialCollapsed={collapsed}
+      canSettings={allowed.has("settings")}
+    >
       {denied ? <AccessDenied screen={currentScreen} /> : children}
     </ShellClient>
   );

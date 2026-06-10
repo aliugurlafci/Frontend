@@ -8,6 +8,7 @@ import { apiFetch, ApiRequestError } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import { Icon } from "@/components/ui/icon";
+import { DropdownMenu, MenuItem } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils/cn";
 import { useI18n } from "@/lib/i18n/context";
 import { RecipientPicker, type Recipient } from "./recipient-picker";
@@ -17,6 +18,11 @@ type FolderId = "inbox" | "sent" | "drafts" | "spam" | "trash";
 export interface EmailRecord {
   id: string;
   folder: FolderId;
+  /** Custom-folder membership (→ emailFolder). Empty = lives in its base `folder`. */
+  folderId?: string | null;
+  starred?: boolean;
+  /** RFC Message-ID (synced inbox mail only) — lets bulk delete target the IMAP server. */
+  messageId?: string;
   sender: string;
   subject: string;
   /** Holds the short preview in the list; replaced by the full text once opened. */
@@ -28,18 +34,49 @@ export interface EmailRecord {
   version: number;
 }
 
+/** A user-created mail folder (emailFolder entity). */
+interface MailFolder {
+  id: string;
+  name: string;
+  color?: string;
+  version: number;
+}
+
 interface ComposeRecipient {
   name: string;
   email: string;
 }
 
-const FOLDERS: { id: FolderId; icon: string }[] = [
-  { id: "inbox", icon: "inbox" },
-  { id: "sent", icon: "send" },
-  { id: "drafts", icon: "edit" },
-  { id: "spam", icon: "shield" },
-  { id: "trash", icon: "trash" },
+/** Where a "Move to…" action sends messages. */
+type MoveTarget =
+  | { kind: "system"; id: FolderId; key: string; label: string; icon: string }
+  | { kind: "custom"; id: string; key: string; label: string; color?: string };
+
+/** System views shown in the rail (folders + the cross-folder Starred view). */
+const SYSTEM_VIEWS: { view: string; icon: string }[] = [
+  { view: "inbox", icon: "inbox" },
+  { view: "starred", icon: "star" },
+  { view: "sent", icon: "send" },
+  { view: "drafts", icon: "edit" },
+  { view: "spam", icon: "shield" },
+  { view: "trash", icon: "trash" },
 ];
+
+/** System folders a message can be *moved* into from the Move menu. */
+const MOVE_SYSTEM: { id: FolderId; icon: string }[] = [
+  { id: "inbox", icon: "inbox" },
+  { id: "spam", icon: "shield" },
+];
+
+const FOLDER_COLORS = ["#2563eb", "#16a34a", "#9333ea", "#d97706", "#e41f07", "#0891b2", "#db2777", "#64748b"];
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+/** Delete / move / restore are sent to the backend in batches of this size, so a
+ *  selection of any size becomes a handful of bulk requests instead of one-per-mail. */
+const BULK_CHUNK = 250;
+
+const AVATAR_COLORS = ["#e41f07", "#2563eb", "#16a34a", "#9333ea", "#d97706", "#0891b2", "#db2777"];
+const DRAFT_PLACEHOLDER = "(draft)";
 
 interface Thread {
   key: string;
@@ -47,10 +84,19 @@ interface Thread {
   latest: EmailRecord;
   count: number;
   unread: boolean;
+  starred: boolean;
 }
 
-const AVATAR_COLORS = ["#e41f07", "#2563eb", "#16a34a", "#9333ea", "#d97706", "#0891b2", "#db2777"];
-const DRAFT_PLACEHOLDER = "(draft)";
+function byName(a: MailFolder, b: MailFolder): number {
+  return a.name.localeCompare(b.name);
+}
+
+/** True when message `e` belongs in the given rail view. */
+function matchesView(e: EmailRecord, view: string): boolean {
+  if (view === "starred") return !!e.starred && e.folder !== "trash";
+  if (view.startsWith("cust:")) return e.folderId === view.slice(5);
+  return e.folder === view && !e.folderId;
+}
 
 function initials(name: string): string {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("") || "?";
@@ -113,7 +159,9 @@ export function MailBoard({ initial }: { initial: EmailRecord[] }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [emails, setEmails] = useState<EmailRecord[]>(initial);
-  const [activeFolder, setActiveFolder] = useState<FolderId>("inbox");
+  const [folders, setFolders] = useState<MailFolder[]>([]);
+  // A view is a system folder id, "starred", or `cust:<folderId>`.
+  const [activeView, setActiveView] = useState<string>("inbox");
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState<"all" | "unread">("all");
@@ -121,6 +169,14 @@ export function MailBoard({ initial }: { initial: EmailRecord[] }) {
   const [checked, setChecked] = useState<Set<string>>(new Set());
   // Live deletion progress (null when idle). `move` = relocating to Trash, `purge` = hard delete from Trash.
   const [deleteProgress, setDeleteProgress] = useState<{ done: number; total: number; mode: "move" | "purge" } | null>(null);
+  // Set to true to stop an in-flight bulk delete (already-issued requests finish; no new ones start).
+  const cancelDeleteRef = useRef(false);
+
+  // Custom-folder management
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [newFolderColor, setNewFolderColor] = useState(FOLDER_COLORS[0]);
+  const [editingFolder, setEditingFolder] = useState<{ id: string; name: string } | null>(null);
 
   // Composer
   const [composing, setComposing] = useState(false);
@@ -130,6 +186,7 @@ export function MailBoard({ initial }: { initial: EmailRecord[] }) {
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   const [pending, startTransition] = useTransition();
 
@@ -144,6 +201,9 @@ export function MailBoard({ initial }: { initial: EmailRecord[] }) {
           all.push({
             id: String(r.id),
             folder: (r.folder as FolderId) ?? "inbox",
+            folderId: r.folderId ? String(r.folderId) : null,
+            starred: Boolean(r.starred),
+            messageId: r.messageId ? String(r.messageId) : "",
             sender: String(r.sender ?? ""),
             subject: String(r.subject ?? ""),
             body: String(r.preview ?? ""), // preview only; full text fetched lazily
@@ -161,19 +221,43 @@ export function MailBoard({ initial }: { initial: EmailRecord[] }) {
     }
   }
 
+  /** Load the user's custom mail folders. */
+  async function loadFolders() {
+    try {
+      const res = await apiFetch<{ items: Record<string, unknown>[] }>(`/entities/emailFolder?pageSize=200`);
+      setFolders(
+        res.items
+          .map((r) => ({
+            id: String(r.id),
+            name: String(r.name ?? ""),
+            color: r.color ? String(r.color) : undefined,
+            version: Number(r.version ?? 0),
+          }))
+          .sort(byName),
+      );
+    } catch {
+      /* ignore */
+    }
+  }
+
   /** Lazily fetch + cache a message's full body (no-op once loaded). Returns it. */
   async function loadBody(id: string): Promise<string> {
     const rec = emails.find((e) => e.id === id);
     if (rec?.bodyFull) return rec.body;
     try {
       const full = await apiFetch<{ body?: string }>(`/entities/email/${id}`);
-      const body = String(full.body ?? "");
-      setEmails((prev) => prev.map((e) => (e.id === id ? { ...e, body, bodyFull: true } : e)));
-      return body;
+      const text = String(full.body ?? "");
+      setEmails((prev) => prev.map((e) => (e.id === id ? { ...e, body: text, bodyFull: true } : e)));
+      return text;
     } catch {
       return rec?.body ?? "";
     }
   }
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadFolders();
+  }, []);
 
   // When the global poller pulls new mail, refresh the open mailbox too.
   useEffect(() => {
@@ -206,17 +290,24 @@ export function MailBoard({ initial }: { initial: EmailRecord[] }) {
   }, [openParam, emails]);
 
   const stats = useMemo(() => {
-    const total: Record<string, number> = {};
-    const unread: Record<string, number> = {};
+    const sysTotal: Record<string, number> = {};
+    const sysUnread: Record<string, number> = {};
+    const custTotal: Record<string, number> = {};
+    let starredCount = 0;
     for (const e of emails) {
-      total[e.folder] = (total[e.folder] ?? 0) + 1;
-      if (e.unread) unread[e.folder] = (unread[e.folder] ?? 0) + 1;
+      if (e.folderId) {
+        custTotal[e.folderId] = (custTotal[e.folderId] ?? 0) + 1;
+      } else {
+        sysTotal[e.folder] = (sysTotal[e.folder] ?? 0) + 1;
+        if (e.unread) sysUnread[e.folder] = (sysUnread[e.folder] ?? 0) + 1;
+      }
+      if (e.starred && e.folder !== "trash") starredCount++;
     }
-    return { total, unread };
+    return { sysTotal, sysUnread, custTotal, starredCount };
   }, [emails]);
 
   const threads = useMemo<Thread[]>(() => {
-    let list = emails.filter((e) => e.folder === activeFolder);
+    let list = emails.filter((e) => matchesView(e, activeView));
     if (filter === "unread") list = list.filter((e) => e.unread);
     const q = search.trim().toLowerCase();
     if (q) list = list.filter((e) => `${e.sender} ${e.subject} ${e.body}`.toLowerCase().includes(q));
@@ -232,18 +323,29 @@ export function MailBoard({ initial }: { initial: EmailRecord[] }) {
     for (const [key, msgs] of map) {
       msgs.sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
       const latest = msgs[msgs.length - 1];
-      arr.push({ key, msgs, latest, count: msgs.length, unread: msgs.some((m) => m.unread) });
+      arr.push({ key, msgs, latest, count: msgs.length, unread: msgs.some((m) => m.unread), starred: msgs.some((m) => m.starred) });
     }
     arr.sort((a, b) => (a.latest.createdAt < b.latest.createdAt ? 1 : -1));
     return arr;
-  }, [emails, activeFolder, filter, search]);
+  }, [emails, activeView, filter, search]);
 
   const selected = threads.find((th) => th.key === selectedKey) ?? null;
   const allChecked = threads.length > 0 && threads.every((th) => checked.has(th.key));
 
+  // Targets offered by the "Move to…" menu (excludes the current view).
+  const moveTargets = useMemo<MoveTarget[]>(() => {
+    const out: MoveTarget[] = [];
+    for (const s of MOVE_SYSTEM) {
+      if (activeView !== s.id) out.push({ kind: "system", id: s.id, key: `sys:${s.id}`, label: t(`email.folder.${s.id}`), icon: s.icon });
+    }
+    for (const f of folders) {
+      if (activeView !== `cust:${f.id}`) out.push({ kind: "custom", id: f.id, key: `cust:${f.id}`, label: f.name, color: f.color });
+    }
+    return out;
+  }, [folders, activeView, t]);
+
   // Flatten the conversation list (date-group headers + thread rows) into a
-  // single array, then virtualize it so only on-screen rows hit the DOM —
-  // keeps the mailbox snappy with thousands of messages.
+  // single array, then virtualize it so only on-screen rows hit the DOM.
   const listRows = useMemo<({ type: "header"; key: string; group: string } | { type: "thread"; key: string; thread: Thread })[]>(() => {
     const out: ({ type: "header"; key: string; group: string } | { type: "thread"; key: string; thread: Thread })[] = [];
     let lastGroup = "";
@@ -280,18 +382,21 @@ export function MailBoard({ initial }: { initial: EmailRecord[] }) {
     setBody("");
   }
 
-  function selectFolder(f: FolderId) {
-    setActiveFolder(f);
+  function selectView(view: string) {
+    setActiveView(view);
     setSelectedKey(null);
     setExpanded(new Set());
     setChecked(new Set());
     resetCompose();
   }
 
+  // ── compose recipients (incl. free-text addresses not in the system) ──
   function collectEmails(): string[] {
     const list = recipients.map((r) => r.email);
-    const m = manualTo.trim();
-    if (m.includes("@")) list.push(m);
+    for (const p of manualTo.split(/[\s,;]+/)) {
+      const e = p.trim();
+      if (EMAIL_RE.test(e)) list.push(e);
+    }
     return [...new Set(list.map((e) => e.trim()).filter(Boolean))];
   }
 
@@ -309,11 +414,24 @@ export function MailBoard({ initial }: { initial: EmailRecord[] }) {
     });
   }
 
+  /** Add one or many free-text addresses (paste a comma/space-separated list). */
   function addManual() {
-    const m = manualTo.trim();
-    if (!m.includes("@")) return;
-    addRecipients([{ name: m, email: m }]);
-    setManualTo("");
+    const raw = manualTo.trim();
+    if (!raw) return;
+    const parts = raw.split(/[\s,;]+/).map((x) => x.trim()).filter(Boolean);
+    const valid: { name: string; email: string }[] = [];
+    const invalid: string[] = [];
+    for (const p of parts) {
+      if (EMAIL_RE.test(p)) valid.push({ name: p, email: p });
+      else invalid.push(p);
+    }
+    if (valid.length) addRecipients(valid);
+    if (invalid.length) {
+      toast.error(t("email.compose.invalidEmail", { value: invalid.join(", ") }));
+      setManualTo(invalid.join(", "));
+    } else {
+      setManualTo("");
+    }
   }
 
   function removeRecipient(email: string) {
@@ -321,7 +439,6 @@ export function MailBoard({ initial }: { initial: EmailRecord[] }) {
   }
 
   // ── thread open / read ──────────────────────────────
-  /** Mark a thread's unread messages read (PATCH); the response carries the full body, so cache it. */
   function markMessagesRead(msgs: EmailRecord[]) {
     const toMark = msgs.filter((m) => m.unread);
     if (toMark.length === 0) return;
@@ -345,33 +462,30 @@ export function MailBoard({ initial }: { initial: EmailRecord[] }) {
   }
 
   function openThread(th: Thread) {
-    if (activeFolder === "drafts") {
+    if (th.latest.folder === "drafts") {
       openDraft(th.latest);
       return;
     }
     setSelectedKey(th.key);
     setComposing(false);
     setExpanded(new Set());
-    // The latest message is expanded by default — make sure its full body is loaded.
-    // (Unread messages get their body for free from the mark-read response below.)
     if (!th.latest.unread) void loadBody(th.latest.id);
     markMessagesRead(th.msgs);
   }
 
-  /** Open a specific message by id (used by the notification deep link). Switches to
-   *  its folder, selects its thread, loads the body and marks the thread read.
-   *  Returns false when the message isn't in local state yet (so the caller can wait). */
+  /** Open a specific message by id (notification deep link). Returns false if not loaded yet. */
   function openMessageById(id: string): boolean {
     const target = emails.find((e) => e.id === id);
     if (!target) return false;
+    const view = target.folderId ? `cust:${target.folderId}` : target.folder;
     const key = threadKey(target);
     setComposing(false);
-    setActiveFolder(target.folder);
-    setFilter("all"); // make sure the thread is visible regardless of the unread filter
+    setActiveView(view);
+    setFilter("all");
     setExpanded(new Set());
     setSelectedKey(key);
     void loadBody(target.id);
-    markMessagesRead(emails.filter((e) => e.folder === target.folder && threadKey(e) === key));
+    markMessagesRead(emails.filter((e) => matchesView(e, view) && threadKey(e) === key));
     return true;
   }
 
@@ -391,55 +505,171 @@ export function MailBoard({ initial }: { initial: EmailRecord[] }) {
     });
   }
 
-  // ── delete (single thread or bulk) ──────────────────
-  // From any folder except Trash, messages are *moved* to Trash (folder → "trash");
-  // from Trash itself they are *purged* (hard DELETE). Either way state is updated
-  // per-message as each request resolves — rows leave the current view live and the
-  // ratio banner ticks up — and a small pool keeps it fast for large selections.
-  const deleting = deleteProgress !== null;
-
-  async function runDelete(msgs: EmailRecord[]): Promise<{ ok: number; failed: number; mode: "move" | "purge" }> {
-    const purge = activeFolder === "trash";
-    const mode: "move" | "purge" = purge ? "purge" : "move";
-    const total = msgs.length;
-    setDeleteProgress({ done: 0, total, mode });
-    let done = 0;
-    let failed = 0;
-    const queue = [...msgs];
-
-    async function worker() {
-      while (queue.length) {
-        const m = queue.shift()!;
-        try {
-          if (purge) {
-            await apiFetch(`/entities/email/${m.id}`, { method: "DELETE", headers: { "if-match": String(m.version) } });
-            setEmails((prev) => prev.filter((x) => x.id !== m.id));
-          } else {
+  // ── star / flag ─────────────────────────────────────
+  function toggleStar(th: Thread) {
+    const anyStar = th.msgs.some((m) => m.starred);
+    const targets = anyStar ? th.msgs.filter((m) => m.starred) : [th.latest];
+    const value = !anyStar;
+    startTransition(async () => {
+      await Promise.all(
+        targets.map(async (m) => {
+          try {
             const updated = await apiFetch<EmailRecord>(`/entities/email/${m.id}`, {
               method: "PATCH",
-              body: { folder: "trash" },
+              body: { starred: value },
               headers: { "if-match": String(m.version) },
             });
             setEmails((prev) => prev.map((x) => (x.id === updated.id ? { ...x, ...updated } : x)));
+          } catch {
+            /* ignore */
           }
-        } catch {
-          failed++;
-        } finally {
-          done++;
-          setDeleteProgress({ done, total, mode });
-        }
-      }
-    }
-
-    await Promise.all(Array.from({ length: Math.min(8, total) }, worker));
-    setDeleteProgress(null);
-    return { ok: total - failed, failed, mode };
+        }),
+      );
+    });
   }
 
-  function reportDelete(r: { ok: number; failed: number; mode: "move" | "purge" }) {
-    if (r.ok > 0)
-      toast.success(t(r.mode === "purge" ? "email.delete.purgedToast" : "email.delete.movedToast", { n: String(r.ok) }));
-    if (r.failed > 0) toast.error(t("email.delete.failedToast", { n: String(r.failed) }));
+  /** Optimistically apply a folder/folderId patch to the given ids (version +1, matching the bulk UPDATE). */
+  function applyPatchLocal(ids: string[], patch: { folder?: FolderId; folderId?: string | null }) {
+    const idSet = new Set(ids);
+    setEmails((prev) => prev.map((x) => (idSet.has(x.id) ? { ...x, ...patch, version: x.version + 1 } : x)));
+  }
+
+  // ── move to folder (bulk, chunked — one UPDATE per chunk) ──
+  function moveMessages(msgs: EmailRecord[], target: MoveTarget) {
+    if (msgs.length === 0) return;
+    setSelectedKey(null);
+    setChecked(new Set());
+    const patch: { folder?: FolderId; folderId: string | null } =
+      target.kind === "custom" ? { folderId: target.id } : { folder: target.id, folderId: null };
+    startTransition(async () => {
+      let moved = 0;
+      let failure: unknown = null;
+      for (let i = 0; i < msgs.length; i += BULK_CHUNK) {
+        const ids = msgs.slice(i, i + BULK_CHUNK).map((m) => m.id);
+        try {
+          const res = await apiFetch<{ updated: number }>("/email/move", { method: "POST", body: { ids, ...patch } });
+          applyPatchLocal(ids, patch);
+          moved += res.updated;
+        } catch (e) {
+          failure = e;
+        }
+      }
+      if (moved > 0) toast.success(t("email.move.toast", { n: String(moved) }));
+      else if (failure) fail(failure);
+      else toast.error(t("email.move.failed"));
+    });
+  }
+
+  function renderMoveItems(msgs: EmailRecord[], close: () => void) {
+    if (moveTargets.length === 0) return <div className="px-2.5 py-1.5 text-xs text-muted-2">{t("email.folders.empty")}</div>;
+    return (
+      <>
+        {moveTargets.map((tg) => (
+          <MenuItem key={tg.key} onClick={() => { moveMessages(msgs, tg); close(); }}>
+            {tg.kind === "custom" ? (
+              <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: tg.color || "#64748b" }} />
+            ) : (
+              <Icon name={tg.icon} className="h-3.5 w-3.5" />
+            )}
+            {tg.label}
+          </MenuItem>
+        ))}
+      </>
+    );
+  }
+
+  // ── delete (single thread or bulk) ──────────────────
+  // From any view except Trash, messages are *moved* to Trash; from Trash they
+  // are *purged*. A running delete can be stopped, and moves can be undone.
+  const deleting = deleteProgress !== null;
+
+  // Deletes run as bulk requests in BULK_CHUNK batches: from any view except Trash
+  // each batch moves to Trash (DB + the IMAP server), from Trash it purges. A batch
+  // boundary is also where a "Stop" takes effect.
+  async function runDelete(msgs: EmailRecord[]) {
+    const purge = activeView === "trash";
+    const mode: "move" | "purge" = purge ? "purge" : "move";
+    cancelDeleteRef.current = false;
+    const total = msgs.length;
+    setDeleteProgress({ done: 0, total, mode });
+    let done = 0;
+    let ok = 0;
+    let failed = 0;
+    let cancelled = false;
+    let failure: unknown = null;
+    // Each trashed message's origin (+ its bumped version + message-id) so an undo can put it back.
+    const restorable: { id: string; folder: FolderId; folderId: string | null; version: number; messageId?: string }[] = [];
+
+    for (let i = 0; i < msgs.length; i += BULK_CHUNK) {
+      if (cancelDeleteRef.current) {
+        cancelled = true;
+        break;
+      }
+      const chunk = msgs.slice(i, i + BULK_CHUNK);
+      const ids = chunk.map((m) => m.id);
+      const messageIds = chunk.map((m) => m.messageId).filter((x): x is string => !!x);
+      try {
+        if (purge) {
+          const res = await apiFetch<{ deleted: number }>("/email/purge", { method: "POST", body: { ids, messageIds } });
+          const gone = new Set(ids);
+          setEmails((prev) => prev.filter((x) => !gone.has(x.id)));
+          ok += res.deleted;
+          failed += ids.length - res.deleted;
+        } else {
+          const res = await apiFetch<{ updated: number }>("/email/trash", { method: "POST", body: { ids, messageIds } });
+          applyPatchLocal(ids, { folder: "trash", folderId: null });
+          for (const m of chunk) {
+            restorable.push({ id: m.id, folder: m.folder, folderId: m.folderId ?? null, version: m.version + 1, messageId: m.messageId });
+          }
+          ok += res.updated;
+          failed += ids.length - res.updated;
+        }
+      } catch (e) {
+        failed += ids.length;
+        failure = e;
+      }
+      done += chunk.length;
+      setDeleteProgress({ done, total, mode });
+    }
+
+    setDeleteProgress(null);
+    return { ok, failed, total, mode, cancelled, restorable, failure };
+  }
+
+  /** Move trashed messages back to where they came from (undo) — bulk, chunked. */
+  function restoreMessages(items: { id: string; folder: FolderId; folderId: string | null; version: number; messageId?: string }[]) {
+    if (items.length === 0) return;
+    startTransition(async () => {
+      let restored = 0;
+      for (let i = 0; i < items.length; i += BULK_CHUNK) {
+        const chunk = items.slice(i, i + BULK_CHUNK);
+        const messageIds = chunk.map((it) => it.messageId).filter((x): x is string => !!x);
+        try {
+          const res = await apiFetch<{ updated: number }>("/email/restore", {
+            method: "POST",
+            body: { items: chunk.map((it) => ({ id: it.id, folder: it.folder, folderId: it.folderId })), messageIds },
+          });
+          for (const it of chunk) applyPatchLocal([it.id], { folder: it.folder, folderId: it.folderId });
+          restored += res.updated;
+        } catch (e) {
+          fail(e);
+        }
+      }
+      if (restored > 0) toast.success(t("email.delete.restoredToast", { n: String(restored) }));
+    });
+  }
+
+  function reportDelete(r: Awaited<ReturnType<typeof runDelete>>) {
+    if (r.ok > 0 && r.mode === "move") {
+      toast.success(t("email.delete.movedToast", { n: String(r.ok) }), {
+        action: { label: t("email.delete.undo"), onClick: () => restoreMessages(r.restorable) },
+      });
+    }
+    if (r.ok > 0 && r.mode === "purge") toast.success(t("email.delete.purgedToast", { n: String(r.ok) }));
+    // Surface the real backend error when nothing succeeded (e.g. a schema/permission issue).
+    if (r.ok === 0 && r.failed > 0 && r.failure) fail(r.failure);
+    else if (r.failed > 0) toast.error(t("email.delete.failedToast", { n: String(r.failed) }));
+    if (r.cancelled) toast.message(t("email.delete.stopped", { done: String(r.ok), total: String(r.total) }));
   }
 
   function deleteThread(th: Thread) {
@@ -473,6 +703,67 @@ export function MailBoard({ initial }: { initial: EmailRecord[] }) {
 
   function toggleAll() {
     setChecked(allChecked ? new Set() : new Set(threads.map((th) => th.key)));
+  }
+
+  // ── custom folders: create / rename / delete ────────
+  function createFolder() {
+    const name = newFolderName.trim();
+    if (!name) return;
+    startTransition(async () => {
+      try {
+        const created = await apiFetch<MailFolder>(`/entities/emailFolder`, { method: "POST", body: { name, color: newFolderColor } });
+        const folder: MailFolder = { id: String(created.id), name: created.name, color: created.color, version: created.version };
+        setFolders((prev) => [...prev, folder].sort(byName));
+        setCreatingFolder(false);
+        setNewFolderName("");
+        setNewFolderColor(FOLDER_COLORS[0]);
+        setActiveView(`cust:${folder.id}`);
+        setSelectedKey(null);
+        toast.success(t("email.folders.created"));
+      } catch (e) {
+        fail(e);
+      }
+    });
+  }
+
+  function submitRename() {
+    if (!editingFolder) return;
+    const name = editingFolder.name.trim();
+    const f = folders.find((x) => x.id === editingFolder.id);
+    if (!f || !name) {
+      setEditingFolder(null);
+      return;
+    }
+    startTransition(async () => {
+      try {
+        const updated = await apiFetch<MailFolder>(`/entities/emailFolder/${f.id}`, {
+          method: "PATCH",
+          body: { name },
+          headers: { "if-match": String(f.version) },
+        });
+        setFolders((prev) => prev.map((x) => (x.id === f.id ? { ...x, name: updated.name, version: updated.version } : x)).sort(byName));
+        setEditingFolder(null);
+        toast.success(t("email.folders.renamed"));
+      } catch (e) {
+        fail(e);
+      }
+    });
+  }
+
+  function deleteFolder(f: MailFolder) {
+    if (!window.confirm(t("email.folders.deleteConfirm"))) return;
+    startTransition(async () => {
+      try {
+        await apiFetch(`/email/folders/${f.id}`, { method: "DELETE" });
+        setFolders((prev) => prev.filter((x) => x.id !== f.id));
+        // Locally return its messages to their base folder.
+        setEmails((prev) => prev.map((e) => (e.folderId === f.id ? { ...e, folderId: null } : e)));
+        if (activeView === `cust:${f.id}`) selectView("inbox");
+        toast.success(t("email.folders.deleted"));
+      } catch (e) {
+        fail(e);
+      }
+    });
   }
 
   // ── compose / drafts ────────────────────────────────
@@ -530,7 +821,7 @@ export function MailBoard({ initial }: { initial: EmailRecord[] }) {
           return draft ? next.filter((x) => x.id !== draft.id) : next;
         });
         resetCompose();
-        setActiveFolder("sent");
+        setActiveView("sent");
         toast.success(
           list.length === 1 ? t("email.sentToast", { to: list[0] }) : t("email.bulkSentToast", { n: String(list.length) }),
         );
@@ -560,7 +851,7 @@ export function MailBoard({ initial }: { initial: EmailRecord[] }) {
           setEmails((prev) => [created, ...prev]);
         }
         resetCompose();
-        setActiveFolder("drafts");
+        setActiveView("drafts");
         toast.success(t("email.compose.draftSaved"));
       } catch (e) {
         fail(e);
@@ -569,32 +860,43 @@ export function MailBoard({ initial }: { initial: EmailRecord[] }) {
   }
 
   function sync() {
+    if (syncing) return;
+    setSyncing(true);
+    // A live loading toast tells the user the sync is still running; it resolves
+    // in place to the result (synced / not-configured / error).
+    const toastId = toast.loading(t("email.syncing"));
     startTransition(async () => {
       try {
         const res = await apiFetch<{ configured: boolean; synced: number }>("/email/sync", { method: "POST" });
         if (!res.configured) {
-          toast.message(t("email.syncNotConfigured"), { description: t("email.syncNotConfiguredDesc") });
+          toast.message(t("email.syncNotConfigured"), { id: toastId, description: t("email.syncNotConfiguredDesc") });
           return;
         }
         await reload();
-        toast.success(t("email.syncedToast", { n: String(res.synced) }));
+        toast.success(t("email.syncedToast", { n: String(res.synced) }), { id: toastId });
         if (res.synced > 0) window.dispatchEvent(new CustomEvent("aula:mail-synced", { detail: { synced: res.synced } }));
       } catch (e) {
-        fail(e);
+        toast.error(e instanceof ApiRequestError ? e.message : "Something went wrong", { id: toastId });
+      } finally {
+        setSyncing(false);
       }
     });
   }
 
-  const folderName = (f: FolderId) => t(`email.folder.${f}`);
+  // ── rail helpers ────────────────────────────────────
+  const viewName = (view: string) => (view === "starred" ? t("email.folder.starred") : t(`email.folder.${view}`));
 
-  function folderBadge(f: FolderId) {
-    const accent = f === "inbox" || f === "spam";
-    const n = accent ? stats.unread[f] ?? 0 : stats.total[f] ?? 0;
+  function viewBadge(view: string) {
+    let n = 0;
+    let accent = false;
+    if (view === "starred") n = stats.starredCount;
+    else if (view === "inbox" || view === "spam") {
+      n = stats.sysUnread[view] ?? 0;
+      accent = true;
+    } else n = stats.sysTotal[view] ?? 0;
     if (n <= 0) return null;
     return (
-      <span className={cn("ml-auto text-xs tabular-nums", accent ? "font-semibold text-primary" : "text-muted-2")}>
-        {n}
-      </span>
+      <span className={cn("ml-auto text-xs tabular-nums", accent ? "font-semibold text-primary" : "text-muted-2")}>{n}</span>
     );
   }
 
@@ -605,7 +907,7 @@ export function MailBoard({ initial }: { initial: EmailRecord[] }) {
     return (
       <div
         className={cn(
-          "group flex items-start gap-2 border-l-2 pl-2 pr-3 transition-colors",
+          "group flex items-start gap-2 border-l-2 pl-2 pr-2 transition-colors",
           selectedKey === th.key
             ? "border-l-primary bg-primary/5"
             : th.unread
@@ -618,9 +920,7 @@ export function MailBoard({ initial }: { initial: EmailRecord[] }) {
           aria-label={t("email.selectAll")}
           className={cn(
             "mt-3.5 h-4 w-4 shrink-0 rounded border transition-opacity",
-            isChecked
-              ? "border-primary bg-primary opacity-100"
-              : "border-border-strong opacity-0 group-hover:opacity-100",
+            isChecked ? "border-primary bg-primary opacity-100" : "border-border-strong opacity-0 group-hover:opacity-100",
           )}
         />
         <button onClick={() => openThread(th)} className="flex min-w-0 flex-1 items-start gap-3 py-2.5 text-left">
@@ -643,7 +943,19 @@ export function MailBoard({ initial }: { initial: EmailRecord[] }) {
             </p>
             <p className="truncate text-xs text-muted">{th.latest.body}</p>
           </div>
-          {th.unread && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary" />}
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleStar(th);
+          }}
+          aria-label={th.starred ? t("email.unstar") : t("email.star")}
+          className={cn(
+            "mt-3 flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition-opacity hover:bg-surface-2",
+            th.starred ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+          )}
+        >
+          <Icon name="star" className={cn("h-4 w-4", th.starred ? "animate-pop text-amber-500" : "text-muted-2")} />
         </button>
       </div>
     );
@@ -656,14 +968,14 @@ export function MailBoard({ initial }: { initial: EmailRecord[] }) {
           <h1 className="text-lg font-semibold">{t("email.title")}</h1>
           <p className="text-xs text-muted">{t("email.subtitle")}</p>
         </div>
-        <Button variant="secondary" size="sm" onClick={sync} disabled={pending || deleting}>
-          <Icon name="recurring" className="h-3.5 w-3.5" />
-          {t("email.sync")}
+        <Button variant="secondary" size="sm" onClick={sync} disabled={syncing || deleting} aria-busy={syncing}>
+          <Icon name="recurring" className={cn("h-3.5 w-3.5 transition-transform", syncing && "animate-spin")} />
+          {syncing ? t("email.syncing") : t("email.sync")}
         </Button>
       </div>
 
       {deleteProgress && (
-        <div className="flex items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2">
+        <div className="flex items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2 animate-rise">
           <Icon name="trash" className="h-4 w-4 shrink-0 text-danger" />
           <div className="min-w-0 flex-1">
             <div className="flex items-center justify-between gap-2 text-xs">
@@ -685,33 +997,213 @@ export function MailBoard({ initial }: { initial: EmailRecord[] }) {
               />
             </div>
           </div>
+          <button
+            onClick={() => {
+              cancelDeleteRef.current = true;
+            }}
+            className="flex shrink-0 items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-medium text-foreground transition-colors hover:bg-surface-2"
+          >
+            <Icon name="square" className="h-3 w-3" />
+            {t("email.delete.stop")}
+          </button>
         </div>
       )}
 
       <div className="grid h-[calc(100vh-12rem)] min-h-[32rem] gap-3 overflow-hidden lg:grid-cols-[230px_minmax(300px,360px)_1fr]">
         {/* ── Folder rail ───────────────────────────── */}
-        <aside className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-3">
+        <aside className="flex flex-col gap-2 overflow-y-auto rounded-xl border border-border bg-surface p-3">
           <Button className="w-full" variant="primary" size="sm" onClick={startCompose} disabled={pending}>
             <Icon name="plus" className="h-3.5 w-3.5" />
             {t("email.newMail")}
           </Button>
+
           <nav className="space-y-0.5">
-            {FOLDERS.map((f) => (
-              <button
-                key={f.id}
-                onClick={() => selectFolder(f.id)}
-                className={cn(
-                  "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors",
-                  activeFolder === f.id
-                    ? "bg-primary/10 font-medium text-primary"
-                    : "text-muted hover:bg-surface-2 hover:text-foreground",
-                )}
-              >
-                <Icon name={f.icon} className="h-4 w-4 shrink-0" />
-                <span className="truncate">{folderName(f.id)}</span>
-                {folderBadge(f.id)}
-              </button>
-            ))}
+            {SYSTEM_VIEWS.map((v) => {
+              const active = activeView === v.view;
+              return (
+                <button
+                  key={v.view}
+                  onClick={() => selectView(v.view)}
+                  className={cn(
+                    "group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-all",
+                    active ? "bg-primary/10 font-medium text-primary" : "text-muted hover:bg-surface-2 hover:text-foreground",
+                  )}
+                >
+                  <Icon
+                    name={v.icon}
+                    className={cn(
+                      "h-4 w-4 shrink-0 transition-transform group-hover:scale-110",
+                      v.view === "starred" && active && "text-amber-500",
+                    )}
+                  />
+                  <span className="truncate">{viewName(v.view)}</span>
+                  {viewBadge(v.view)}
+                </button>
+              );
+            })}
+          </nav>
+
+          {/* custom folders */}
+          <div className="mt-1 flex items-center justify-between px-2.5 pt-1">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-2">{t("email.folders.section")}</span>
+            <button
+              onClick={() => {
+                setCreatingFolder((v) => !v);
+                setEditingFolder(null);
+              }}
+              aria-label={t("email.folders.new")}
+              className="flex h-5 w-5 items-center justify-center rounded text-muted transition-colors hover:bg-surface-2 hover:text-primary"
+            >
+              <Icon name="plus" className="h-3.5 w-3.5" />
+            </button>
+          </div>
+
+          {creatingFolder && (
+            <div className="animate-rise space-y-2 rounded-lg border border-border bg-surface-2/40 p-2">
+              <Input
+                autoFocus
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    createFolder();
+                  }
+                  if (e.key === "Escape") setCreatingFolder(false);
+                }}
+                placeholder={t("email.folders.namePlaceholder")}
+                className="h-8"
+              />
+              <div className="flex flex-wrap items-center gap-1.5">
+                {FOLDER_COLORS.map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => setNewFolderColor(c)}
+                    aria-label={t("email.folders.color")}
+                    className={cn(
+                      "h-5 w-5 rounded-full transition-transform hover:scale-110",
+                      newFolderColor === c && "ring-2 ring-foreground ring-offset-1 ring-offset-surface",
+                    )}
+                    style={{ backgroundColor: c }}
+                  />
+                ))}
+              </div>
+              <div className="flex justify-end gap-1.5">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    setCreatingFolder(false);
+                    setNewFolderName("");
+                  }}
+                >
+                  {t("email.compose.discard")}
+                </Button>
+                <Button variant="primary" size="sm" onClick={createFolder} disabled={!newFolderName.trim() || pending}>
+                  {t("email.folders.create")}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          <nav className="space-y-0.5">
+            {folders.length === 0 && !creatingFolder && (
+              <p className="px-2.5 py-1 text-xs text-muted-2">{t("email.folders.empty")}</p>
+            )}
+            {folders.map((f) => {
+              const view = `cust:${f.id}`;
+              const active = activeView === view;
+              const n = stats.custTotal[f.id] ?? 0;
+              if (editingFolder?.id === f.id) {
+                return (
+                  <div key={f.id} className="animate-rise flex items-center gap-1 px-0.5 py-0.5">
+                    <Input
+                      autoFocus
+                      value={editingFolder.name}
+                      onChange={(e) => setEditingFolder({ id: f.id, name: e.target.value })}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          submitRename();
+                        }
+                        if (e.key === "Escape") setEditingFolder(null);
+                      }}
+                      className="h-8"
+                    />
+                    <button
+                      onClick={submitRename}
+                      aria-label={t("email.folders.rename")}
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-primary hover:bg-surface-2"
+                    >
+                      <Icon name="check" className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => setEditingFolder(null)}
+                      aria-label={t("email.compose.discard")}
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-surface-2"
+                    >
+                      <Icon name="close" className="h-4 w-4" />
+                    </button>
+                  </div>
+                );
+              }
+              return (
+                <div key={f.id} className="group relative flex items-center">
+                  <button
+                    onClick={() => selectView(view)}
+                    className={cn(
+                      "flex min-w-0 flex-1 items-center gap-2.5 rounded-lg py-2 pl-2.5 pr-7 text-sm transition-all",
+                      active ? "bg-primary/10 font-medium text-primary" : "text-muted hover:bg-surface-2 hover:text-foreground",
+                    )}
+                  >
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: f.color || "#64748b" }} />
+                    <span className="truncate">{f.name}</span>
+                  </button>
+                  <div className="absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center">
+                    {n > 0 && <span className="text-xs tabular-nums text-muted-2 group-hover:hidden">{n}</span>}
+                    <div className="hidden group-hover:block">
+                      <DropdownMenu
+                        align="end"
+                        trigger={({ toggle }) => (
+                          <button
+                            onClick={toggle}
+                            aria-label={f.name}
+                            className="flex h-5 w-5 items-center justify-center rounded text-muted transition-colors hover:bg-surface-2 hover:text-foreground"
+                          >
+                            <Icon name="settings" className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      >
+                        {({ close }) => (
+                          <>
+                            <MenuItem
+                              onClick={() => {
+                                setEditingFolder({ id: f.id, name: f.name });
+                                setCreatingFolder(false);
+                                close();
+                              }}
+                            >
+                              <Icon name="edit" className="h-3.5 w-3.5" />
+                              {t("email.folders.rename")}
+                            </MenuItem>
+                            <MenuItem
+                              danger
+                              onClick={() => {
+                                close();
+                                deleteFolder(f);
+                              }}
+                            >
+                              <Icon name="trash" className="h-3.5 w-3.5" />
+                              {t("email.folders.delete")}
+                            </MenuItem>
+                          </>
+                        )}
+                      </DropdownMenu>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </nav>
         </aside>
 
@@ -753,6 +1245,29 @@ export function MailBoard({ initial }: { initial: EmailRecord[] }) {
                 <>
                   <span className="font-medium text-primary">{t("email.selectedCount", { n: String(checked.size) })}</span>
                   <div className="ml-auto flex items-center gap-1">
+                    {moveTargets.length > 0 && activeView !== "drafts" && (
+                      <DropdownMenu
+                        align="end"
+                        panelClassName="w-52"
+                        trigger={({ toggle }) => (
+                          <button
+                            onClick={toggle}
+                            disabled={pending || deleting}
+                            className="flex items-center gap-1 rounded-md px-2 py-1 text-muted transition-colors hover:bg-surface-2 hover:text-foreground disabled:opacity-50"
+                          >
+                            <Icon name="transfer" className="h-3.5 w-3.5" />
+                            {t("email.move.button")}
+                          </button>
+                        )}
+                      >
+                        {({ close }) =>
+                          renderMoveItems(
+                            threads.filter((th) => checked.has(th.key)).flatMap((th) => th.msgs),
+                            close,
+                          )
+                        }
+                      </DropdownMenu>
+                    )}
                     <button
                       onClick={bulkDelete}
                       disabled={pending || deleting}
@@ -805,7 +1320,7 @@ export function MailBoard({ initial }: { initial: EmailRecord[] }) {
         {/* ── Reading pane / composer ───────────────── */}
         <section className="flex flex-col overflow-hidden rounded-xl border border-border bg-surface">
           {composing ? (
-            <>
+            <div className="flex flex-1 flex-col overflow-hidden animate-rise">
               <div className="flex items-center justify-between border-b border-border px-4 py-3">
                 <h2 className="text-sm font-semibold tracking-tight">{t("email.compose.title")}</h2>
                 <button
@@ -855,6 +1370,7 @@ export function MailBoard({ initial }: { initial: EmailRecord[] }) {
                     </button>
                   </div>
                 </div>
+                <p className="px-1 text-[11px] text-muted-2">{t("email.compose.recipientsHint")}</p>
                 <Input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder={t("email.compose.subject")} />
                 <Textarea
                   value={body}
@@ -878,10 +1394,10 @@ export function MailBoard({ initial }: { initial: EmailRecord[] }) {
                   </Button>
                 </div>
               </div>
-            </>
+            </div>
           ) : selected ? (
-            <>
-              <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+            <div className="flex flex-1 flex-col overflow-hidden animate-fade">
+              <div className="flex items-center gap-1.5 border-b border-border px-4 py-3">
                 <div className="min-w-0 flex-1">
                   <h2 className="truncate text-base font-semibold">{selected.latest.subject || t("email.noSubject")}</h2>
                   {selected.count > 1 && (
@@ -896,6 +1412,28 @@ export function MailBoard({ initial }: { initial: EmailRecord[] }) {
                   <Icon name="forward" className="h-4 w-4" />
                   <span className="hidden sm:inline">{t("email.forward")}</span>
                 </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => toggleStar(selected)}
+                  disabled={pending}
+                  aria-label={selected.starred ? t("email.unstar") : t("email.star")}
+                >
+                  <Icon name="star" className={cn("h-4 w-4", selected.starred ? "animate-pop text-amber-500" : "")} />
+                </Button>
+                {moveTargets.length > 0 && (
+                  <DropdownMenu
+                    align="end"
+                    panelClassName="w-52"
+                    trigger={({ toggle }) => (
+                      <Button variant="ghost" size="sm" onClick={toggle} disabled={pending} aria-label={t("email.move.button")}>
+                        <Icon name="transfer" className="h-4 w-4" />
+                      </Button>
+                    )}
+                  >
+                    {({ close }) => renderMoveItems(selected.msgs, close)}
+                  </DropdownMenu>
+                )}
                 <Button variant="ghost" size="sm" onClick={() => markThreadUnread(selected)} disabled={pending} aria-label={t("email.markUnread")}>
                   <Icon name="mailOpen" className="h-4 w-4" />
                 </Button>
@@ -958,7 +1496,7 @@ export function MailBoard({ initial }: { initial: EmailRecord[] }) {
                   {t("email.reply")}
                 </Button>
               </div>
-            </>
+            </div>
           ) : (
             <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
               <Icon name="email" className="h-10 w-10 text-muted-2" />

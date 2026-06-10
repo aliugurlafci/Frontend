@@ -33,6 +33,10 @@ function applyAppearance(s: Settings): void {
   }
   if (s.density === "compact") R.setAttribute("data-density", "compact");
   else R.removeAttribute("data-density");
+  if (s.fontSize === "sm" || s.fontSize === "lg") R.setAttribute("data-font", s.fontSize);
+  else R.removeAttribute("data-font");
+  if (s.motion === "reduced") R.setAttribute("data-motion", "reduced");
+  else R.removeAttribute("data-motion");
 }
 
 /**

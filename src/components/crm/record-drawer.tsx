@@ -152,7 +152,7 @@ export function RecordDrawer({
         method: "POST",
         body: { action },
       });
-      toast.success(`Deal ${action} succeeded`);
+      toast.success(t("drawer.actionOk", { entity: entityName, action: t(`action.${action}`) }));
       await loadDetail(record.id);
       onChanged();
     } catch (e) {
@@ -180,22 +180,6 @@ export function RecordDrawer({
     }
   }
 
-  async function convertLead() {
-    if (!record) return;
-    setBusy(true);
-    try {
-      await apiFetch(`/leads/${record.id}/convert`, { method: "POST" });
-      toast.success("Lead converted to account, contact & deal");
-      await loadDetail(record.id);
-      onChanged();
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const canConvert = entity.name === "lead" && record !== null && record.status !== "converted";
   const title = record ? String(record[entity.titleField] ?? entityName) : entityName;
 
   return (
@@ -229,16 +213,11 @@ export function RecordDrawer({
         <p className="text-sm text-muted">{t("common.loading")}</p>
       ) : (
         <div className="space-y-4">
-          {(actions.length > 0 || canConvert) && !editing && (
+          {actions.length > 0 && !editing && (
             <div className="flex flex-wrap gap-2">
-              {canConvert && (
-                <Button variant="primary" size="sm" loading={busy} onClick={convertLead}>
-                  Convert
-                </Button>
-              )}
               {actions.map((a) => (
                 <Button key={a.action} size="sm" loading={busy} onClick={() => runAction(a.action)}>
-                  {a.action} → {a.to}
+                  {t(`action.${a.action}`)}
                 </Button>
               ))}
             </div>

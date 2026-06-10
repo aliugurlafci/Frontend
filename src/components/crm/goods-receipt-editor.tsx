@@ -12,26 +12,29 @@ import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input, Label, Select } from "@/components/ui/input";
 import { Icon } from "@/components/ui/icon";
+import { useT } from "@/lib/i18n/client";
 
 interface GrnLine {
-  productId: string | null;
+  productId: string;
+  description: string;
   qty: number;
   unitCost: number;
+  outstanding: number; // remaining qty on the PO line (max receivable)
 }
 interface DocResult {
   doc: EntityRecord;
   lines: EntityRecord[];
 }
 
-const emptyLine = (): GrnLine => ({ productId: null, qty: 1, unitCost: 0 });
-
-/** Goods-receipt editor: compose receipt lines, create, then post (writes stock
- *  movements + GL). Posted receipts are read-only. */
+/**
+ * Goods-receipt editor — receipts are always made against an APPROVED purchase
+ * order. Selecting a PO pulls in its outstanding lines (you can only receive the
+ * PO's own products, up to each line's remaining quantity). There is no free-form
+ * receiving: without an approved PO there is nothing to receive.
+ */
 export function GoodsReceiptEditor({
   id,
-  suppliers,
   products,
-  warehouses,
   purchaseOrders,
 }: {
   id: string;
@@ -41,23 +44,30 @@ export function GoodsReceiptEditor({
   purchaseOrders: EntityRecord[];
 }) {
   const router = useRouter();
+  const t = useT();
   const isNew = id === "new";
   const [doc, setDoc] = useState<EntityRecord | null>(null);
-  const [header, setHeader] = useState<Record<string, unknown>>({});
-  const [lines, setLines] = useState<GrnLine[]>([emptyLine()]);
+  const [poId, setPoId] = useState<string>("");
+  const [po, setPo] = useState<EntityRecord | null>(null);
+  const [receiptDate, setReceiptDate] = useState<string>("");
+  const [lines, setLines] = useState<GrnLine[]>([]);
   const [busy, setBusy] = useState(false);
 
   const posted = doc?.status === "posted" || doc?.status === "void";
+  const productName = (pid: string) => products.find((p) => String(p.id) === pid)?.name as string | undefined;
 
   async function load() {
     const res = await apiFetch<DocResult>(`/goods-receipts/${id}`);
     setDoc(res.doc);
-    setHeader({ ...res.doc });
+    setPoId(String(res.doc.poId ?? ""));
+    setReceiptDate(String(res.doc.receiptDate ?? ""));
     setLines(
       res.lines.map((l) => ({
-        productId: (l.productId as string) ?? null,
+        productId: String(l.productId ?? ""),
+        description: String(productName(String(l.productId ?? "")) ?? l.description ?? ""),
         qty: typeof l.qty === "number" ? l.qty : 0,
         unitCost: typeof l.unitCost === "number" ? l.unitCost : 0,
+        outstanding: typeof l.qty === "number" ? l.qty : 0,
       })),
     );
   }
@@ -68,27 +78,53 @@ export function GoodsReceiptEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  function setField(name: string, value: unknown) {
-    setHeader((h) => ({ ...h, [name]: value }));
+  /** Pull the chosen PO's outstanding lines into the receipt. */
+  async function pickPO(nextPoId: string) {
+    setPoId(nextPoId);
+    setPo(null);
+    setLines([]);
+    if (!nextPoId) return;
+    try {
+      const res = await apiFetch<DocResult>(`/purchase-orders/${nextPoId}`);
+      setPo(res.doc);
+      const outstandingLines = res.lines
+        .map((l) => {
+          const outstanding = Number(l.qty ?? 0) - Number(l.qtyReceived ?? 0);
+          return {
+            productId: String(l.productId ?? ""),
+            description: String(l.description ?? productName(String(l.productId ?? "")) ?? ""),
+            qty: outstanding,
+            unitCost: Number(l.unitPrice ?? 0),
+            outstanding,
+          } as GrnLine;
+        })
+        .filter((l) => l.productId && l.outstanding > 0);
+      if (!outstandingLines.length) toast.message(t("grn.nothingOutstanding"));
+      setLines(outstandingLines);
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
   }
+
   function updateLine(i: number, patch: Partial<GrnLine>) {
     setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
-  }
-  function pickProduct(i: number, productId: string) {
-    const p = products.find((x) => String(x.id) === productId);
-    updateLine(i, { productId: productId || null, unitCost: p && typeof p.costPrice === "number" ? p.costPrice : 0 });
   }
 
   const total = lines.reduce((s, l) => s + l.qty * l.unitCost, 0);
 
   async function create() {
-    if (!header.warehouseId) {
-      toast.error("Please choose a warehouse");
+    if (!poId) {
+      toast.error(t("grn.poRequired"));
       return;
     }
     const validLines = lines.filter((l) => l.productId && l.qty > 0);
     if (!validLines.length) {
-      toast.error("Add at least one line");
+      toast.error(t("grn.addLine"));
+      return;
+    }
+    const over = validLines.find((l) => l.qty > l.outstanding + 1e-9);
+    if (over) {
+      toast.error(t("grn.overReceive", { product: over.description }));
       return;
     }
     setBusy(true);
@@ -96,14 +132,14 @@ export function GoodsReceiptEditor({
       const res = await apiFetch<DocResult>("/goods-receipts", {
         method: "POST",
         body: {
-          warehouseId: header.warehouseId,
-          supplierId: header.supplierId ?? null,
-          poId: header.poId ?? null,
-          receiptDate: header.receiptDate ?? null,
+          poId,
+          warehouseId: po?.warehouseId ?? null,
+          supplierId: po?.supplierId ?? null,
+          receiptDate: receiptDate || null,
           lines: validLines.map((l) => ({ productId: l.productId, qty: l.qty, unitCost: l.unitCost })),
         },
       });
-      toast.success("Goods receipt created");
+      toast.success(t("grn.created"));
       router.push(`/goodsReceipt/${res.doc.id}`);
     } catch (e) {
       toast.error((e as Error).message);
@@ -116,7 +152,7 @@ export function GoodsReceiptEditor({
     setBusy(true);
     try {
       await apiFetch(`/goods-receipts/${id}/post`, { method: "POST" });
-      toast.success("Posted — stock updated");
+      toast.success(t("grn.posted"));
       await load();
     } catch (e) {
       toast.error((e as Error).message);
@@ -130,132 +166,112 @@ export function GoodsReceiptEditor({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-3">
           <Link href="/goodsReceipt" className="text-sm text-muted hover:text-foreground">
-            <Icon name="chevronLeft" className="inline h-4 w-4" /> Goods Receipts
+            <Icon name="chevronLeft" className="inline h-4 w-4" /> {t("grn.listTitle")}
           </Link>
-          <h1 className="text-lg font-semibold">{isNew ? "New Goods Receipt" : String(doc?.number ?? "GRN")}</h1>
+          <h1 className="text-lg font-semibold">{isNew ? t("grn.new") : String(doc?.number ?? "GRN")}</h1>
           {doc && <Badge tone={doc.status === "posted" ? "success" : doc.status === "void" ? "danger" : "neutral"}>{String(doc.status)}</Badge>}
         </div>
         <div className="flex items-center gap-2">
           {isNew ? (
             <Button variant="primary" size="sm" loading={busy} onClick={create}>
-              Create
+              {t("grn.create")}
             </Button>
           ) : (
             doc?.status === "draft" && (
               <Button variant="primary" size="sm" loading={busy} onClick={post}>
-                Post receipt
+                {t("grn.post")}
               </Button>
             )
           )}
         </div>
       </div>
 
+      {isNew && (
+        <p className="rounded-md border border-info/30 bg-info/10 px-3 py-2 text-sm text-foreground">{t("grn.hint")}</p>
+      )}
+
       <Card>
-        <CardHeader title="Details" />
+        <CardHeader title={t("grn.details")} />
         <CardBody className="grid gap-3 sm:grid-cols-2">
           <div>
-            <Label htmlFor="wh" required>
-              Warehouse
+            <Label htmlFor="po" required>
+              {t("grn.purchaseOrder")}
             </Label>
-            <Select id="wh" value={String(header.warehouseId ?? "")} disabled={!isNew} onChange={(e) => setField("warehouseId", e.target.value || null)}>
-              <option value="">— Select —</option>
-              {warehouses.map((w) => (
-                <option key={w.id} value={w.id}>
-                  {String(w.name)}
-                </option>
-              ))}
-            </Select>
+            {isNew ? (
+              <Select id="po" value={poId} onChange={(e) => pickPO(e.target.value)}>
+                <option value="">{t("grn.selectApprovedPO")}</option>
+                {purchaseOrders.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {String(p.number)}
+                  </option>
+                ))}
+              </Select>
+            ) : (
+              <Input value={purchaseOrders.find((p) => String(p.id) === poId)?.number as string ?? poId} disabled />
+            )}
           </div>
           <div>
-            <Label htmlFor="sup">Supplier</Label>
-            <Select id="sup" value={String(header.supplierId ?? "")} disabled={!isNew} onChange={(e) => setField("supplierId", e.target.value || null)}>
-              <option value="">— None —</option>
-              {suppliers.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {String(s.name)}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div>
-            <Label htmlFor="po">Purchase Order</Label>
-            <Select id="po" value={String(header.poId ?? "")} disabled={!isNew} onChange={(e) => setField("poId", e.target.value || null)}>
-              <option value="">— None —</option>
-              {purchaseOrders.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {String(p.number)}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div>
-            <Label htmlFor="rd">Receipt Date</Label>
-            <Input id="rd" type="date" disabled={!isNew} value={String(header.receiptDate ?? "")} onChange={(e) => setField("receiptDate", e.target.value || null)} />
+            <Label htmlFor="rd">{t("grn.receiptDate")}</Label>
+            <Input id="rd" type="date" disabled={!isNew} value={receiptDate} onChange={(e) => setReceiptDate(e.target.value)} />
           </div>
         </CardBody>
       </Card>
 
       <Card>
-        <CardHeader title="Received items" />
+        <CardHeader title={t("grn.receivedItems")} />
         <CardBody>
-          <table className="w-full text-sm">
-            <thead className="border-b border-border text-left text-xs uppercase text-muted">
-              <tr>
-                <th className="py-2">Product</th>
-                <th className="w-24 py-2">Qty</th>
-                <th className="w-28 py-2">Unit Cost</th>
-                <th className="w-28 py-2 text-right">Total</th>
-                {!posted && <th className="w-8" />}
-              </tr>
-            </thead>
-            <tbody>
-              {lines.map((l, i) => (
-                <tr key={i} className="border-b border-border last:border-0">
-                  <td className="py-1.5">
-                    {posted ? (
-                      products.find((p) => String(p.id) === l.productId)?.name as string ?? l.productId
-                    ) : (
-                      <Select value={l.productId ?? ""} onChange={(e) => pickProduct(i, e.target.value)} className="h-8 text-xs">
-                        <option value="">— Select —</option>
-                        {products.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {String(p.name)}
-                          </option>
-                        ))}
-                      </Select>
-                    )}
-                  </td>
-                  <td className="py-1.5">
-                    {posted ? l.qty : <Input type="number" value={l.qty} onChange={(e) => updateLine(i, { qty: Number(e.target.value) })} className="h-8 text-xs" />}
-                  </td>
-                  <td className="py-1.5">
-                    {posted ? formatMoney(l.unitCost, "USD") : <Input type="number" value={l.unitCost} onChange={(e) => updateLine(i, { unitCost: Number(e.target.value) })} className="h-8 text-xs" />}
-                  </td>
-                  <td className="py-1.5 text-right tabular-nums">{formatMoney(l.qty * l.unitCost, "USD")}</td>
-                  {!posted && (
-                    <td className="py-1.5">
-                      <button onClick={() => setLines((ls) => ls.filter((_, idx) => idx !== i))} className="text-muted hover:text-danger" aria-label="Remove">
-                        <Icon name="trash" className="h-3.5 w-3.5" />
-                      </button>
-                    </td>
-                  )}
+          {lines.length === 0 ? (
+            <p className="py-4 text-center text-sm text-muted">{isNew ? t("grn.pickPOFirst") : t("grn.noLines")}</p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="border-b border-border text-left text-xs uppercase text-muted">
+                <tr>
+                  <th className="py-2">{t("grn.colProduct")}</th>
+                  {isNew && <th className="w-20 py-2 text-right">{t("grn.colOrdered")}</th>}
+                  <th className="w-24 py-2">{t("grn.colQty")}</th>
+                  <th className="w-28 py-2">{t("grn.colUnitCost")}</th>
+                  <th className="w-28 py-2 text-right">{t("grn.colTotal")}</th>
                 </tr>
-              ))}
-            </tbody>
-            <tfoot className="border-t border-border">
-              <tr>
-                <td colSpan={3} className="py-2 text-right text-xs text-muted">
-                  Total value
-                </td>
-                <td className="py-2 text-right font-semibold tabular-nums">{formatMoney(total, "USD")}</td>
-                {!posted && <td />}
-              </tr>
-            </tfoot>
-          </table>
-          {!posted && (
-            <Button size="sm" className="mt-2" onClick={() => setLines((ls) => [...ls, emptyLine()])}>
-              <Icon name="plus" className="h-3.5 w-3.5" /> Add line
-            </Button>
+              </thead>
+              <tbody>
+                {lines.map((l, i) => (
+                  <tr key={i} className="border-b border-border last:border-0">
+                    <td className="py-1.5">{l.description || productName(l.productId) || l.productId}</td>
+                    {isNew && <td className="py-1.5 text-right tabular-nums text-muted">{l.outstanding}</td>}
+                    <td className="py-1.5">
+                      {posted || !isNew ? (
+                        l.qty
+                      ) : (
+                        <Input
+                          type="number"
+                          value={l.qty}
+                          min={0}
+                          max={l.outstanding}
+                          onChange={(e) => updateLine(i, { qty: Math.min(Number(e.target.value), l.outstanding) })}
+                          className="h-8 text-xs"
+                        />
+                      )}
+                    </td>
+                    <td className="py-1.5">
+                      {posted || !isNew ? (
+                        formatMoney(l.unitCost, "USD")
+                      ) : (
+                        <Input type="number" value={l.unitCost} onChange={(e) => updateLine(i, { unitCost: Number(e.target.value) })} className="h-8 text-xs" />
+                      )}
+                    </td>
+                    <td className="py-1.5 text-right tabular-nums">{formatMoney(l.qty * l.unitCost, "USD")}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="border-t border-border">
+                <tr>
+                  <td colSpan={isNew ? 3 : 2} className="py-2 text-right text-xs text-muted">
+                    {t("grn.totalValue")}
+                  </td>
+                  <td className="py-2 text-right font-semibold tabular-nums">{formatMoney(total, "USD")}</td>
+                </tr>
+              </tfoot>
+            </table>
           )}
         </CardBody>
       </Card>

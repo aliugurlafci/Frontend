@@ -77,6 +77,7 @@ import {
   ShoppingCart,
   Minus,
   Square,
+  Undo2,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -126,6 +127,7 @@ const MAP: Record<string, LucideIcon> = {
   label: Tags,
   pos: ShoppingCart,
   cart: ShoppingCart,
+  return: Undo2,
   minus: Minus,
   square: Square,
   // app/ui icons

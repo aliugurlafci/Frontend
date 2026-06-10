@@ -1,14 +1,15 @@
 import Link from "next/link";
+import { serverApi } from "@/lib/http/server-api";
 import { getT } from "@/lib/i18n/server";
 import { PasswordForm } from "@/components/crm/settings-password-form";
-import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { TwoFactorForm } from "@/components/crm/settings-twofactor-form";
+import { SecurityActivity } from "@/components/crm/settings-security-activity";
 
 export const dynamic = "force-dynamic";
 
 export default async function SecuritySettingsPage() {
   const t = await getT();
+  const me = await serverApi.me();
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -22,21 +23,8 @@ export default async function SecuritySettingsPage() {
       </div>
 
       <PasswordForm />
-
-      <Card>
-        <CardHeader title={t("settings.security.twoFactor")} action={<Badge tone="warning">{t("settings.off")}</Badge>} />
-        <CardBody className="flex items-center justify-between gap-3 text-sm">
-          <p className="text-muted">{t("settings.security.twoFactorDesc")}</p>
-          <Button variant="outline" size="sm" type="button" disabled title={t("settings.security.notAvailable")}>
-            {t("settings.security.enable2fa")}
-          </Button>
-        </CardBody>
-      </Card>
-
-      <Card>
-        <CardHeader title={t("settings.security.sessions")} />
-        <CardBody className="text-sm text-muted">{t("settings.security.sessionsDesc")}</CardBody>
-      </Card>
+      <TwoFactorForm initialEnabled={me.twoFactorEnabled} />
+      <SecurityActivity />
     </div>
   );
 }

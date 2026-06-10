@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { apiFetch } from "@/lib/api-client";
-import { Tabs } from "@/components/ui/tabs";
-import { Spinner } from "@/components/ui/spinner";
 import { Icon } from "@/components/ui/icon";
+import { cn } from "@/lib/utils/cn";
 import { useI18n } from "@/lib/i18n/context";
 import type { AutomationCatalog, CatalogUser } from "./types";
 import { OverviewTab } from "./overview";
@@ -14,12 +13,25 @@ import { QueueTab } from "./queue";
 import { AssignmentTab } from "./assignment";
 import { IntegrationsTab } from "./integrations";
 import { SettingsTab } from "./settings";
+import { SkeletonCards } from "./anim";
+
+const TAB_ICONS: Record<string, string> = {
+  overview: "home",
+  automations: "recurring",
+  logs: "activity",
+  queue: "inbox",
+  assignment: "users",
+  integrations: "globe",
+  settings: "settings",
+};
 
 export function AutomationConsole() {
   const { t } = useI18n();
   const [tab, setTab] = useState("overview");
   const [catalog, setCatalog] = useState<AutomationCatalog | null>(null);
   const [users, setUsers] = useState<CatalogUser[]>([]);
+  const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const [indicator, setIndicator] = useState<{ left: number; width: number }>({ left: 0, width: 0 });
 
   const TABS = [
     { value: "overview", label: t("auto.tab.overview") },
@@ -40,39 +52,99 @@ export function AutomationConsole() {
       .catch(() => undefined);
   }, []);
 
+  // Slide the active-tab pill to the selected button (re-measures on tab change,
+  // label/locale change and viewport resize so it always tracks).
+  useEffect(() => {
+    const measure = () => {
+      const el = tabRefs.current[tab];
+      if (el) setIndicator({ left: el.offsetLeft, width: el.offsetWidth });
+    };
+    measure();
+    const id = requestAnimationFrame(measure);
+    window.addEventListener("resize", measure);
+    return () => {
+      cancelAnimationFrame(id);
+      window.removeEventListener("resize", measure);
+    };
+  }, [tab, t]);
+
+  const needsCatalog = tab === "automations" || tab === "assignment";
+
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary-hover text-primary-foreground shadow-[0_6px_18px_-6px_var(--primary)]">
+      {/* Hero header */}
+      <div className="glass glass-sheen relative overflow-hidden rounded-2xl px-5 py-4 animate-rise">
+        <div
+          className="pointer-events-none absolute -right-10 -top-16 h-44 w-44 rounded-full bg-gradient-to-br from-primary/25 to-secondary/20 blur-3xl"
+          aria-hidden
+        />
+        <div className="relative flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <span className="animate-float flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-secondary text-primary-foreground shadow-[0_10px_28px_-8px_var(--primary)]">
               <Icon name="recurring" className="h-5 w-5" />
             </span>
-            {t("auto.title")}
-          </h1>
-          <p className="mt-0.5 text-sm text-muted">{t("auto.subtitle")}</p>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">
+                <span className="text-gradient">{t("auto.title")}</span>
+              </h1>
+              <p className="mt-0.5 flex items-center gap-1.5 text-sm text-muted">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success/70" />
+                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-success" />
+                </span>
+                {t("auto.subtitle")}
+              </p>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="overflow-x-auto">
-        <Tabs items={TABS} value={tab} onChange={setTab} />
+      {/* Animated segmented tabs */}
+      <div className="overflow-x-auto pb-1">
+        <div className="glass relative inline-flex min-w-full gap-1 rounded-xl p-1 sm:min-w-0">
+          <span
+            className="absolute top-1 h-[calc(100%-0.5rem)] rounded-lg bg-gradient-to-br from-primary to-primary-hover shadow-[0_6px_18px_-8px_var(--primary)] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
+            style={{ left: indicator.left, width: indicator.width }}
+            aria-hidden
+          />
+          {TABS.map((tb) => {
+            const active = tab === tb.value;
+            return (
+              <button
+                key={tb.value}
+                ref={(el) => {
+                  tabRefs.current[tb.value] = el;
+                }}
+                onClick={() => setTab(tb.value)}
+                className={cn(
+                  "relative z-10 flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-200",
+                  active ? "text-primary-foreground" : "text-muted hover:text-foreground",
+                )}
+              >
+                <Icon name={TAB_ICONS[tb.value]} className="h-3.5 w-3.5" />
+                <span className="whitespace-nowrap">{tb.label}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      {!catalog && tab !== "overview" && tab !== "logs" && tab !== "queue" ? (
-        <div className="flex items-center gap-2 p-8 text-sm text-muted">
-          <Spinner /> {t("auto.loadingCatalog")}
-        </div>
-      ) : (
-        <div className="animate-fade">
-          {tab === "overview" && <OverviewTab onJump={setTab} />}
-          {tab === "automations" && catalog && <RulesTab catalog={catalog} users={users} />}
-          {tab === "logs" && <LogsTab />}
-          {tab === "queue" && <QueueTab />}
-          {tab === "assignment" && catalog && <AssignmentTab catalog={catalog} users={users} />}
-          {tab === "integrations" && <IntegrationsTab />}
-          {tab === "settings" && <SettingsTab />}
-        </div>
-      )}
+      {/* Tab content — re-keyed so each switch replays the entrance */}
+      <div key={tab} className="animate-fade">
+        {needsCatalog && !catalog ? (
+          <SkeletonCards count={6} />
+        ) : (
+          <>
+            {tab === "overview" && <OverviewTab onJump={setTab} />}
+            {tab === "automations" && catalog && <RulesTab catalog={catalog} users={users} />}
+            {tab === "logs" && <LogsTab />}
+            {tab === "queue" && <QueueTab />}
+            {tab === "assignment" && catalog && <AssignmentTab catalog={catalog} users={users} />}
+            {tab === "integrations" && <IntegrationsTab />}
+            {tab === "settings" && <SettingsTab />}
+          </>
+        )}
+      </div>
     </div>
   );
 }

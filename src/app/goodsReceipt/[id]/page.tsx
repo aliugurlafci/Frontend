@@ -12,13 +12,18 @@ export default async function GoodsReceiptEditorPage({ params }: { params: Promi
     serverApi.list("purchaseOrder", { pageSize: 200, sort: [{ field: "number", dir: "desc" }] }),
   ]);
 
+  // Only approved (and partially-received) POs are receivable — the GRN screen
+  // must not offer drafts/pending/closed orders. (The `in` filter isn't supported
+  // by the list query string, so narrow here.)
+  const receivablePOs = purchaseOrders.items.filter((p) => p.status === "approved" || p.status === "partial");
+
   return (
     <GoodsReceiptEditor
       id={id}
       suppliers={suppliers.items}
       products={products.items}
       warehouses={warehouses.items}
-      purchaseOrders={purchaseOrders.items}
+      purchaseOrders={receivablePOs}
     />
   );
 }

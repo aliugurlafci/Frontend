@@ -12,6 +12,9 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { useLocale } from "@/lib/i18n/client";
+import { fmtMoneyCompact, fmtNumberCompact } from "@/lib/i18n/format";
+import type { Locale } from "@/lib/i18n/config";
 
 export interface ChartDatum {
   label: string;
@@ -30,16 +33,8 @@ export const CHART_PALETTE = [
   "var(--muted-2)",
 ];
 
-const usd = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  notation: "compact",
-  maximumFractionDigits: 1,
-});
-const compact = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
-
-const fmt = (kind: "currency" | "number") => (v: number) =>
-  kind === "currency" ? usd.format(v) : compact.format(v);
+const fmtFor = (locale: Locale, kind: "currency" | "number") => (v: number) =>
+  kind === "currency" ? fmtMoneyCompact(locale, v) : fmtNumberCompact(locale, v);
 
 const TOOLTIP_STYLE = {
   background: "var(--surface)",
@@ -50,7 +45,8 @@ const TOOLTIP_STYLE = {
 
 /** Vertical bars — value across a small set of categories (stages, statuses…). */
 export function PipelineBarChart({ data, kind = "currency" }: { data: ChartDatum[]; kind?: "currency" | "number" }) {
-  const format = fmt(kind);
+  const locale = useLocale();
+  const format = fmtFor(locale, kind);
   return (
     <ResponsiveContainer width="100%" height={240}>
       <BarChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 8 }}>
@@ -76,7 +72,8 @@ export function PipelineBarChart({ data, kind = "currency" }: { data: ChartDatum
 
 /** Horizontal bars — ranked top-N lists (products, branches, accounts…). */
 export function HBarChart({ data, kind = "currency" }: { data: ChartDatum[]; kind?: "currency" | "number" }) {
-  const format = fmt(kind);
+  const locale = useLocale();
+  const format = fmtFor(locale, kind);
   const height = Math.max(160, data.length * 40 + 16);
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -112,7 +109,8 @@ export function StageDonut({
   kind?: "currency" | "number";
   unitLabel?: string;
 }) {
-  const format = fmt(kind);
+  const locale = useLocale();
+  const format = fmtFor(locale, kind);
   const total = data.reduce((s, d) => s + d.value, 0);
   return (
     <ResponsiveContainer width="100%" height={240}>
@@ -133,7 +131,7 @@ export function StageDonut({
           dominantBaseline="middle"
           className="fill-foreground text-lg font-semibold"
         >
-          {kind === "currency" ? usd.format(total) : compact.format(total)}
+          {kind === "currency" ? fmtMoneyCompact(locale, total) : fmtNumberCompact(locale, total)}
         </text>
       </PieChart>
     </ResponsiveContainer>
@@ -142,7 +140,8 @@ export function StageDonut({
 
 /** Compact legend for donuts (label + colour swatch + value). */
 export function ChartLegend({ data, kind = "number" }: { data: ChartDatum[]; kind?: "currency" | "number" }) {
-  const format = fmt(kind);
+  const locale = useLocale();
+  const format = fmtFor(locale, kind);
   return (
     <ul className="mt-2 space-y-1 text-xs">
       {data.map((d) => (

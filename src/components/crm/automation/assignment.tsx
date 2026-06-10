@@ -6,18 +6,18 @@ import { apiFetch } from "@/lib/api-client";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import { Icon } from "@/components/ui/icon";
 import { Input, Select, Label } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/utils/cn";
 import { useI18n } from "@/lib/i18n/context";
 import type { AssignmentRule, AssignmentStrategy, AutomationCatalog, CatalogUser } from "./types";
+import { Reveal, Skeleton } from "./anim";
 
 const BLANK: AssignmentRule = {
   id: "",
   name: "",
-  entity: "lead",
+  entity: "account",
   strategy: "round_robin",
   pool: [],
   enabled: true,
@@ -77,8 +77,10 @@ export function AssignmentTab({ catalog, users }: { catalog: AutomationCatalog; 
 
   if (!rules) {
     return (
-      <div className="flex items-center gap-2 p-8 text-sm text-muted">
-        <Spinner /> Loading assignment rules…
+      <div className="grid gap-3 lg:grid-cols-2">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-28" />
+        ))}
       </div>
     );
   }
@@ -98,8 +100,9 @@ export function AssignmentTab({ catalog, users }: { catalog: AutomationCatalog; 
         </Card>
       ) : (
         <div className="grid gap-3 lg:grid-cols-2">
-          {rules.map((rule) => (
-            <Card key={rule.id} className="p-4">
+          {rules.map((rule, idx) => (
+            <Reveal key={rule.id} i={idx} className="h-full">
+            <Card className="h-full p-4 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[var(--shadow-md)]">
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <div className="flex items-center gap-2">
@@ -125,13 +128,14 @@ export function AssignmentTab({ catalog, users }: { catalog: AutomationCatalog; 
               </div>
               <div className="mt-2 flex flex-wrap gap-1">
                 {rule.pool.length === 0 && <span className="text-xs text-muted-2">{t("auto.asg.emptyPool")}</span>}
-                {rule.pool.map((id) => (
-                  <Badge key={id} tone="neutral">
-                    {userName(id)}
-                  </Badge>
+                {rule.pool.map((id, pi) => (
+                  <span key={id} className="animate-zoom-in" style={{ animationDelay: `${pi * 50}ms` }}>
+                    <Badge tone="neutral">{userName(id)}</Badge>
+                  </span>
                 ))}
               </div>
             </Card>
+            </Reveal>
           ))}
         </div>
       )}

@@ -25,6 +25,10 @@ export default async function ProfileSettingsPage() {
           email: me.email,
           phone: me.phone ?? "",
           timezone: me.timezone ?? "UTC",
+          avatarId: me.avatarId ?? "",
+          jobTitle: me.jobTitle ?? "",
+          location: me.location ?? "",
+          bio: me.bio ?? "",
         }}
       />
     </div>

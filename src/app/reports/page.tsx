@@ -3,7 +3,14 @@ import { serverApi } from "@/lib/http/server-api";
 import { metadata } from "@/lib/metadata";
 import type { FieldDef, EntityRecord } from "@/lib/metadata/types";
 import type { AggregateRow } from "@/lib/data/query";
+import { getLocale } from "@/lib/i18n/server";
+import { t as translate } from "@/lib/i18n/messages";
+import { enumLabel } from "@/lib/i18n/labels";
+import { fmtMoney, fmtDateTime } from "@/lib/i18n/format";
+import type { Locale } from "@/lib/i18n/config";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { ReportHeader, ReportKpis } from "@/components/crm/report-shell";
+import type { ReportPayload, ReportSection } from "@/lib/reports/types";
 import {
   PipelineBarChart,
   HBarChart,
@@ -39,39 +46,32 @@ async function safeList(entity: string, pageSize: number): Promise<EntityRecord[
   }
 }
 
-/** Enum field → chart data, keeping the option order, labels and tone colours. */
-function toChartData(field: FieldDef, rows: AggregateRow[], measureKey: string): ChartDatum[] {
+/** Enum field → chart data (localized labels, option order, tone colours). */
+function toChartData(field: FieldDef, rows: AggregateRow[], measureKey: string, locale: Locale): ChartDatum[] {
   const byKey = new Map(rows.map((r) => [r.key, r.measures[measureKey] ?? 0]));
   return (field.options ?? [])
-    .map((o) => ({ label: o.label, value: Math.round(byKey.get(o.value) ?? 0), color: TONE_COLOR[o.tone ?? "neutral"] }))
+    .map((o) => ({ label: enumLabel(field, o.value, locale), value: Math.round(byKey.get(o.value) ?? 0), color: TONE_COLOR[o.tone ?? "neutral"] }))
     .filter((d) => d.value > 0);
 }
 
 /** Reference rows → ranked chart data, resolving ids to names via a lookup. */
-function toRankedData(rows: AggregateRow[], names: Map<string, string>, measureKey: string, limit = 6): ChartDatum[] {
+function toRankedData(rows: AggregateRow[], names: Map<string, string>, measureKey: string, fallback: string, limit = 6): ChartDatum[] {
   return rows
-    .map((r) => ({ label: r.key ? names.get(String(r.key)) ?? "—" : "Unassigned", value: Math.round(r.measures[measureKey] ?? 0) }))
+    .map((r) => ({ label: r.key ? names.get(String(r.key)) ?? "—" : fallback, value: Math.round(r.measures[measureKey] ?? 0) }))
     .filter((d) => d.value > 0)
     .sort((a, b) => b.value - a.value)
     .slice(0, limit)
     .map((d, i) => ({ ...d, color: CHART_PALETTE[i % CHART_PALETTE.length] }));
 }
 
-const REPORT_CATEGORIES: { href: string; title: string; description: string }[] = [
-  { href: "/reports/deals", title: "Deal Reports", description: "Pipeline broken down by stage with deal-level detail." },
-  { href: "/reports/leads", title: "Lead Reports", description: "Lead volume by source and status, with conversion stats." },
-  { href: "/reports/sales", title: "Sales Reports", description: "Won revenue, open pipeline and stage performance." },
-  { href: "/reports/revenue", title: "Revenue Reports", description: "Invoiced amounts by status and cash collected via payments." },
-  { href: "/inventory-dashboard", title: "Inventory", description: "Stock on hand, valuation and reorder alerts by product." },
-  { href: "/accounting-dashboard", title: "Accounting", description: "Trial balance, profit & loss and the balance sheet." },
-  { href: "/branch-dashboard", title: "Branch & Dealer", description: "Sales, receivables and stock value per branch." },
-];
-
 export default async function ReportsPage() {
+  const locale = await getLocale();
+  const tr = (k: string, vars?: Record<string, string>) => translate(locale, k, vars);
+  const now = new Date().toISOString();
+
   const [
     dealByStage,
     invoiceByStatus,
-    leadBySource,
     stockByProduct,
     stockByBranch,
     billByStatus,
@@ -83,7 +83,6 @@ export default async function ReportsPage() {
   ] = await Promise.all([
     safeAgg("deal", { groupBy: "stage", measures: [{ op: "sum", field: "amount", as: "value" }] }),
     safeAgg("invoice", { groupBy: "status", measures: [{ op: "sum", field: "total", as: "value" }] }),
-    safeAgg("lead", { groupBy: "source", measures: [{ op: "count", as: "value" }] }),
     safeAgg("stockMovement", { groupBy: "productId", measures: [{ op: "sum", field: "value", as: "value" }] }),
     safeAgg("stockMovement", { groupBy: "branchId", measures: [{ op: "sum", field: "value", as: "value" }] }),
     safeAgg("vendorBill", { groupBy: "status", measures: [{ op: "sum", field: "balance", as: "value" }] }),
@@ -102,15 +101,15 @@ export default async function ReportsPage() {
   ]);
 
   const stageField = metadata.getEntity("deal").fields.find((f) => f.name === "stage")!;
-  const sourceField = metadata.getEntity("lead").fields.find((f) => f.name === "source")!;
   const statusField = metadata.getEntity("invoice").fields.find((f) => f.name === "status")!;
   const billStatusField = metadata.getEntity("vendorBill").fields.find((f) => f.name === "status")!;
   const methodField = metadata.getEntity("payment").fields.find((f) => f.name === "method")!;
 
   const productName = new Map(products.map((p) => [String(p.id), String(p.name ?? p.sku ?? "—")]));
   const branchName = new Map(branches.map((b) => [String(b.id), String(b.name ?? b.code ?? "—")]));
-  const topProducts = toRankedData(stockByProduct, productName, "value");
-  const stockBranchData = toRankedData(stockByBranch, branchName, "value", 8);
+  const unassigned = tr("report.col.branch");
+  const topProducts = toRankedData(stockByProduct, productName, "value", tr("report.col.product"));
+  const stockBranchData = toRankedData(stockByBranch, branchName, "value", unassigned, 8);
 
   // P&L from the posted trial balance, joined to account type.
   const accType = new Map(ledgerAccounts.map((a) => [String(a.id), String(a.type ?? "")]));
@@ -124,70 +123,116 @@ export default async function ReportsPage() {
     else if (type === "expense") expense += dr - cr;
   }
   const plData: ChartDatum[] = [
-    { label: "Revenue", value: Math.round(revenue), color: TONE_COLOR.success },
-    { label: "Expenses", value: Math.round(expense), color: TONE_COLOR.danger },
-    { label: "Net income", value: Math.round(revenue - expense), color: TONE_COLOR.info },
+    { label: tr("report.finance.revenue"), value: Math.round(revenue), color: TONE_COLOR.success },
+    { label: tr("report.finance.expenses"), value: Math.round(expense), color: TONE_COLOR.danger },
+    { label: tr("report.finance.netIncome"), value: Math.round(revenue - expense), color: TONE_COLOR.info },
   ].filter((d) => d.value !== 0);
 
-  const pipelineData = toChartData(stageField, dealByStage, "value");
-  const invoiceData = toChartData(statusField, invoiceByStatus, "value");
-  const leadData = toChartData(sourceField, leadBySource, "value");
-  const billData = toChartData(billStatusField, billByStatus, "value");
-  const cashData = toChartData(methodField, paymentByMethod, "value");
+  const pipelineData = toChartData(stageField, dealByStage, "value", locale);
+  const invoiceData = toChartData(statusField, invoiceByStatus, "value", locale);
+  const billData = toChartData(billStatusField, billByStatus, "value", locale);
+  const cashData = toChartData(methodField, paymentByMethod, "value", locale);
+
+  // ── KPI strip + export payload (tabular versions of the charts) ─────────
+  const sum = (d: ChartDatum[]) => d.reduce((s, x) => s + x.value, 0);
+  const kpis = [
+    { label: tr("report.sales.openPipeline"), value: fmtMoney(locale, sum(pipelineData)) },
+    { label: tr("report.revenue.invoiced"), value: fmtMoney(locale, sum(invoiceData)) },
+    { label: tr("report.inventory.value"), value: fmtMoney(locale, sum(stockBranchData)) },
+    { label: tr("report.finance.netIncome"), value: fmtMoney(locale, Math.round(revenue - expense)) },
+  ];
+
+  const toSection = (title: string, nameLabel: string, data: ChartDatum[]): ReportSection => ({
+    title,
+    columns: [{ label: nameLabel }, { label: tr("report.col.value"), kind: "currency" }],
+    rows: data.map((d) => [d.label, d.value]),
+    total: [tr("report.total"), sum(data)],
+  });
+
+  const sections: ReportSection[] = [
+    toSection(tr("report.chart.pipelineByStage"), tr("report.col.stage"), pipelineData),
+    toSection(tr("report.chart.invoicedByStatus"), tr("report.col.status"), invoiceData),
+    toSection(tr("report.chart.topProducts"), tr("report.col.product"), topProducts),
+    toSection(tr("report.chart.stockByBranch"), tr("report.col.branch"), stockBranchData),
+    toSection(tr("report.chart.pnl"), tr("report.col.type"), plData),
+    toSection(tr("report.chart.payablesByStatus"), tr("report.col.status"), billData),
+    toSection(tr("report.chart.cashByMethod"), tr("report.col.method"), cashData),
+  ].filter((s) => s.rows.length > 0);
+
+  const payload: ReportPayload = {
+    title: tr("report.overview.title"),
+    subtitle: tr("report.overview.subtitle"),
+    org: "Aula ERP",
+    meta: [{ label: tr("report.generated"), value: fmtDateTime(locale, now) }],
+    kpis,
+    sections,
+    currency: "USD",
+  };
+
+  const library: { href: string; title: string; description: string }[] = [
+    { href: "/reports/deals", title: tr("report.deals.title"), description: tr("report.lib.deals") },
+    { href: "/reports/sales", title: tr("report.sales.title"), description: tr("report.lib.sales") },
+    { href: "/reports/revenue", title: tr("report.revenue.title"), description: tr("report.lib.revenue") },
+    { href: "/reports/inventory", title: tr("report.inventory.title"), description: tr("report.lib.inventory") },
+    { href: "/reports/goods-receipt", title: tr("report.grn.title"), description: tr("report.lib.grn") },
+    { href: "/reports/finance", title: tr("report.finance.title"), description: tr("report.lib.finance") },
+  ];
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-lg font-semibold">Reports</h1>
-        <p className="text-xs text-muted">Sales, inventory, finance &amp; accounting analytics</p>
-      </div>
+      <ReportHeader
+        title={payload.title}
+        subtitle={payload.subtitle}
+        generated={`${tr("report.generated")}: ${fmtDateTime(locale, now)}`}
+        payload={payload}
+        fileName="reports-overview"
+      />
 
-      <Section title="Sales & pipeline">
-        <ChartCard title="Pipeline value by stage" data={pipelineData}>
+      <ReportKpis kpis={kpis} />
+
+      <Section title={tr("report.section.sales")}>
+        <ChartCard title={tr("report.chart.pipelineByStage")} data={pipelineData} noData={tr("report.noData")}>
           <PipelineBarChart data={pipelineData} kind="currency" />
         </ChartCard>
-        <ChartCard title="Invoiced revenue by status" data={invoiceData}>
+        <ChartCard title={tr("report.chart.invoicedByStatus")} data={invoiceData} noData={tr("report.noData")}>
           <PipelineBarChart data={invoiceData} kind="currency" />
-        </ChartCard>
-        <ChartCard title="Leads by source" data={leadData}>
-          <StageDonut data={leadData} kind="number" unitLabel="leads" />
         </ChartCard>
       </Section>
 
-      <Section title="Inventory">
-        <ChartCard title="Top products by stock value" data={topProducts}>
+      <Section title={tr("report.section.inventory")}>
+        <ChartCard title={tr("report.chart.topProducts")} data={topProducts} noData={tr("report.noData")}>
           <HBarChart data={topProducts} kind="currency" />
         </ChartCard>
-        <ChartCard title="Stock value by branch" data={stockBranchData}>
+        <ChartCard title={tr("report.chart.stockByBranch")} data={stockBranchData} noData={tr("report.noData")}>
           <StageDonut data={stockBranchData} kind="currency" />
           <ChartLegend data={stockBranchData} kind="currency" />
         </ChartCard>
       </Section>
 
-      <Section title="Finance & accounting">
-        <ChartCard title="Profit & loss" data={plData}>
+      <Section title={tr("report.section.finance")}>
+        <ChartCard title={tr("report.chart.pnl")} data={plData} noData={tr("report.noData")}>
           <PipelineBarChart data={plData} kind="currency" />
         </ChartCard>
-        <ChartCard title="Payables by status" data={billData}>
+        <ChartCard title={tr("report.chart.payablesByStatus")} data={billData} noData={tr("report.noData")}>
           <PipelineBarChart data={billData} kind="currency" />
         </ChartCard>
-        <ChartCard title="Cash received by method" data={cashData}>
+        <ChartCard title={tr("report.chart.cashByMethod")} data={cashData} noData={tr("report.noData")}>
           <StageDonut data={cashData} kind="currency" />
         </ChartCard>
       </Section>
 
       <div className="space-y-1">
-        <h2 className="text-sm font-semibold">Report library</h2>
-        <p className="text-xs text-muted">Drill into a focused report or dashboard</p>
+        <h2 className="text-sm font-semibold">{tr("report.library")}</h2>
+        <p className="text-xs text-muted">{tr("report.libraryHint")}</p>
       </div>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {REPORT_CATEGORIES.map((c) => (
+        {library.map((c) => (
           <Card key={c.href}>
             <CardHeader title={c.title} />
             <CardBody className="space-y-3 text-sm">
               <p className="text-muted">{c.description}</p>
               <Link href={c.href} className="inline-flex text-xs font-medium text-primary hover:underline">
-                View report →
+                {tr("report.viewReport")}
               </Link>
             </CardBody>
           </Card>
@@ -206,12 +251,12 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function ChartCard({ title, data, children }: { title: string; data: ChartDatum[]; children: React.ReactNode }) {
+function ChartCard({ title, data, noData, children }: { title: string; data: ChartDatum[]; noData: string; children: React.ReactNode }) {
   return (
     <Card>
       <CardHeader title={title} />
       <CardBody>
-        {data.length ? children : <div className="flex h-[200px] items-center justify-center text-xs text-muted">No data to display.</div>}
+        {data.length ? children : <div className="flex h-[200px] items-center justify-center text-xs text-muted">{noData}</div>}
       </CardBody>
     </Card>
   );

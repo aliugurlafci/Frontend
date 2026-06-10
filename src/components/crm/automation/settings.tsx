@@ -5,12 +5,12 @@ import { toast } from "sonner";
 import { apiFetch } from "@/lib/api-client";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import { Icon } from "@/components/ui/icon";
 import { Input, Select, Label } from "@/components/ui/input";
 import { cn } from "@/lib/utils/cn";
 import { useI18n } from "@/lib/i18n/context";
 import type { AutomationSettings, SystemSettingValue, SystemSettingsResponse } from "./types";
+import { Reveal, Skeleton } from "./anim";
 
 function Toggle({
   checked,
@@ -74,8 +74,10 @@ export function SettingsTab() {
 
   if (!settings) {
     return (
-      <div className="flex items-center gap-2 p-8 text-sm text-muted">
-        <Spinner /> {t("auto.loading")}
+      <div className="grid gap-4 lg:grid-cols-2">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-52" />
+        ))}
       </div>
     );
   }
@@ -83,7 +85,8 @@ export function SettingsTab() {
   return (
     <div className="space-y-4">
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
+        <Reveal i={0} className="h-full">
+        <Card className="h-full">
           <CardHeader title={t("auto.set.notif")} />
           <CardBody className="space-y-2">
             <Toggle icon="bell" title={t("auto.set.realtime")} description={t("auto.set.realtimeDesc")} checked={settings.realtimeAlerts} onChange={(v) => patch({ realtimeAlerts: v })} />
@@ -95,8 +98,10 @@ export function SettingsTab() {
             </label>
           </CardBody>
         </Card>
+        </Reveal>
 
-        <Card>
+        <Reveal i={1} className="h-full">
+        <Card className="h-full">
           <CardHeader title={t("auto.set.time")} />
           <CardBody className="space-y-2">
             <Toggle icon="calendar" title={t("auto.set.bizHours")} description={t("auto.set.bizHoursDesc")} checked={settings.businessHoursOnly} onChange={(v) => patch({ businessHoursOnly: v })} />
@@ -122,10 +127,19 @@ export function SettingsTab() {
             </label>
           </CardBody>
         </Card>
+        </Reveal>
 
-        <Card>
+        <Reveal i={2} className="h-full">
+        <Card className="h-full">
           <CardHeader title={t("auto.set.queue")} />
           <CardBody className="space-y-3">
+            <label className="flex items-center justify-between gap-2 text-sm text-muted">
+              <span>
+                {t("auto.set.maxConcurrent")}
+                <span className="block text-xs text-muted-2">{t("auto.set.maxConcurrentHint")}</span>
+              </span>
+              <Input type="number" min={1} value={settings.maxConcurrent} onChange={(e) => patch({ maxConcurrent: Math.max(1, Number(e.target.value)) })} className="h-8 w-24 text-xs" />
+            </label>
             <label className="flex items-center justify-between gap-2 text-sm text-muted">
               {t("auto.set.maxRetries")}
               <Input type="number" value={settings.maxRetries} onChange={(e) => patch({ maxRetries: Number(e.target.value) })} className="h-8 w-24 text-xs" />
@@ -136,8 +150,10 @@ export function SettingsTab() {
             </label>
           </CardBody>
         </Card>
+        </Reveal>
 
-        <Card>
+        <Reveal i={3} className="h-full">
+        <Card className="h-full">
           <CardHeader
             title={
               <span className="flex items-center gap-2">
@@ -152,6 +168,7 @@ export function SettingsTab() {
             <Toggle icon="trending" title={t("auto.set.aiPred")} description={t("auto.set.aiPredDesc")} checked={settings.aiPredictive} onChange={(v) => patch({ aiPredictive: v })} />
           </CardBody>
         </Card>
+        </Reveal>
       </div>
 
       <Card>
@@ -224,10 +241,10 @@ function SystemSettingsCard() {
     return (
       <Card>
         <CardHeader title={t("auto.sys.title")} />
-        <CardBody>
-          <div className="flex items-center gap-2 text-sm text-muted">
-            <Spinner /> {t("auto.loading")}
-          </div>
+        <CardBody className="space-y-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-12" />
+          ))}
         </CardBody>
       </Card>
     );

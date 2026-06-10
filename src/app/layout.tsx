@@ -19,10 +19,10 @@ export const metadata: Metadata = {
   description: "Metadata-driven, multi-tenant CRM",
 };
 
-// Runs before paint to apply theme + accent + density from the user's DB settings
-// (injected below) so there's no flash of the wrong UI.
+// Runs before paint to apply theme + accent + density + text size + motion from
+// the user's DB settings (injected below) so there's no flash of the wrong UI.
 function noFlashScript(settings: Settings): string {
-  return `(function(){try{var R=document.documentElement;var s=${JSON.stringify(settings)};var t=s.theme||'system';var d=t==='dark'||(t==='system'&&matchMedia('(prefers-color-scheme: dark)').matches);R.classList.toggle('dark',d);if(s.accent){R.style.setProperty('--primary',s.accent);R.style.setProperty('--primary-hover',s.accent);}if(s.density==='compact'){R.setAttribute('data-density','compact');}}catch(e){}})();`;
+  return `(function(){try{var R=document.documentElement;var s=${JSON.stringify(settings)};var t=s.theme||'system';var d=t==='dark'||(t==='system'&&matchMedia('(prefers-color-scheme: dark)').matches);R.classList.toggle('dark',d);if(s.accent){R.style.setProperty('--primary',s.accent);R.style.setProperty('--primary-hover',s.accent);}if(s.density==='compact'){R.setAttribute('data-density','compact');}if(s.fontSize==='sm'||s.fontSize==='lg'){R.setAttribute('data-font',s.fontSize);}if(s.motion==='reduced'){R.setAttribute('data-motion','reduced');}}catch(e){}})();`;
 }
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

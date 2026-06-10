@@ -137,9 +137,17 @@ export interface MeResult {
   positionId: string | null;
   position: { id: string; name: string; role: string } | null;
   screens: string[];
+  /** Effective operation grants (matrix-authoritative, else role defaults). */
+  grants: string[];
   phone: string | null;
   timezone: string | null;
-  notificationPrefs: Record<string, { email?: boolean; push?: boolean; sms?: boolean }> | null;
+  avatarId: string | null;
+  jobTitle: string | null;
+  location: string | null;
+  bio: string | null;
+  twoFactorEnabled: boolean;
+  /** Structured notification prefs (or the legacy flat event→channels map). */
+  notificationPrefs: Record<string, unknown> | null;
   /** Per-user config (theme/accent/density/mailSyncInterval…) from the userSetting table. */
   settings: Record<string, string>;
 }
@@ -206,12 +214,23 @@ export const serverApi = {
     return screens;
   },
 
+  /** Permission catalog (admin only): entities + grantable operations + role presets. */
+  permissionsCatalog: async (): Promise<PermissionCatalog> => {
+    return request<PermissionCatalog>(`/permissions/catalog`);
+  },
+
   /** All login users without their password hash (admin only). */
   adminUsers: async (): Promise<Record<string, unknown>[]> => {
     const { users } = await request<{ users: Record<string, unknown>[] }>(`/admin/users`);
     return users;
   },
 };
+
+export interface PermissionCatalog {
+  entities: { name: string; group: string; actions: string[] }[];
+  special: string[];
+  roles: { value: string; grants: string[] }[];
+}
 
 export interface ScreenDef {
   key: string;

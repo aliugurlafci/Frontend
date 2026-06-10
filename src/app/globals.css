@@ -4,9 +4,26 @@
    The ThemeProvider adds/removes `.dark` on <html>; `system` follows the OS. */
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* Compact density — shrinks the base rem unit so the whole (rem-based) UI tightens. */
+/* Text size + density both drive the base rem unit (the whole UI is rem-based).
+   Compact density shrinks it; the font-size preference shifts it up/down. The
+   compound rules resolve the "both set" case explicitly (compact × small/large). */
+html {
+  font-size: 16px;
+}
+html[data-font="sm"] {
+  font-size: 15px;
+}
+html[data-font="lg"] {
+  font-size: 18px;
+}
 html[data-density="compact"] {
   font-size: 14px;
+}
+html[data-density="compact"][data-font="sm"] {
+  font-size: 13px;
+}
+html[data-density="compact"][data-font="lg"] {
+  font-size: 16px;
 }
 
 /* Design tokens — modern glassmorphism palette (cool slate neutrals + CRMS red accent).
@@ -131,6 +148,12 @@ body {
   min-height: 100%;
 }
 
+/* Reserve the scrollbar gutter so opening a tall dropdown (notifications) never
+   toggles a scrollbar and shifts the sticky header / page layout. */
+html {
+  scrollbar-gutter: stable;
+}
+
 body {
   color: var(--foreground);
   background-color: var(--background);
@@ -214,6 +237,71 @@ body {
   .animate-fade {
     animation: glass-fade 0.3s ease both;
   }
+
+  /* Header slide-down entrance (one-shot on mount). `backwards` (not `both`) so no
+     transform lingers after it finishes — a sticky element must not keep a
+     transform (it would re-anchor absolute/fixed descendants like the dropdowns). */
+  .animate-header-down {
+    animation: header-down 0.5s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  }
+
+  /* Tiny "pop" used when toggling a star / flag — playful, one-shot. */
+  .animate-pop {
+    animation: pop 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  /* Gentle floating loop — hero / status icons (e.g. the automation header). */
+  .animate-float {
+    animation: float 3.6s ease-in-out infinite;
+  }
+
+  /* Flowing gradient — connectors, active progress sheens, "live" bars. Pair with
+     a gradient background (e.g. `bg-gradient-to-r`); the over-wide background is
+     panned to create motion. */
+  .animate-flow {
+    background-size: 200% 100%;
+    animation: flow 2.4s linear infinite;
+  }
+
+  /* Vertical "draw in" for flow connectors (scales from the top edge). */
+  .animate-draw-down {
+    transform-origin: top center;
+    animation: draw-down 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  /* Slow breathing opacity — "live" dots, queued badges. */
+  .animate-soft-pulse {
+    animation: soft-pulse 2.2s ease-in-out infinite;
+  }
+
+  /* Scale+fade entrance for cards/grid items; combine with an inline
+     animation-delay for a staggered reveal. */
+  .animate-zoom-in {
+    animation: zoom-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+}
+
+@keyframes pop {
+  0% {
+    transform: scale(0.6);
+  }
+  60% {
+    transform: scale(1.18);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes header-down {
+  from {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* Subtle entrance for content panels. */
@@ -241,6 +329,69 @@ body {
 @keyframes shimmer {
   100% {
     transform: translateX(100%);
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes flow {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes draw-down {
+  from {
+    opacity: 0;
+    transform: scaleY(0);
+  }
+  to {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+}
+
+@keyframes soft-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@keyframes zoom-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94) translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Respect users who prefer reduced motion: drop the decorative entrances/loops
+   (their final/static state is the natural layout, so content stays visible). */
+@media (prefers-reduced-motion: reduce) {
+  .animate-float,
+  .animate-flow,
+  .animate-draw-down,
+  .animate-soft-pulse,
+  .animate-zoom-in,
+  .animate-rise,
+  .animate-fade,
+  .animate-pop {
+    animation: none !important;
   }
 }
 
@@ -272,7 +423,7 @@ body {
   outline-offset: 2px;
 }
 
-/* Honour reduced-motion preferences. */
+/* Honour reduced-motion — either the OS preference or the explicit user setting. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -282,6 +433,14 @@ body {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+html[data-motion="reduced"] *,
+html[data-motion="reduced"] *::before,
+html[data-motion="reduced"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
 }
 
 /* Subtle scrollbars for the data-dense look. */
@@ -316,5 +475,28 @@ body {
   }
   body {
     background: #fff;
+  }
+  /* Force a clean light palette so reports (charts + cards) print legibly from
+     any theme — neutrals go light and the chart tones use their light values. */
+  :root,
+  .dark {
+    --background: #ffffff;
+    --surface: #ffffff;
+    --surface-2: #f1f5f9;
+    --foreground: #0f172a;
+    --muted: #475569;
+    --muted-2: #64748b;
+    --border: #e2e8f0;
+    --border-strong: #cbd5e1;
+    --info: #2563eb;
+    --success: #16a34a;
+    --warning: #f59e0b;
+    --danger: #dc2626;
+    --primary: #e41f07;
+    --secondary: #6d28d9;
+  }
+  section,
+  .break-avoid {
+    break-inside: avoid;
   }
 }

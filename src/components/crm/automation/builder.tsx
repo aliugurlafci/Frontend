@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input, Select, Textarea, Label } from "@/components/ui/input";
+import { Input, Select, Label } from "@/components/ui/input";
 import { Icon } from "@/components/ui/icon";
 import { DropdownMenu, MenuItem } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils/cn";
@@ -17,6 +18,7 @@ import type {
   AutomationRule,
   AutomationTrigger,
   CatalogEntity,
+  CatalogField,
   CatalogUser,
   ConditionGroup,
   ConditionLeaf,
@@ -37,28 +39,166 @@ function newAction(type: ActionType): AutomationAction {
   if (type === "parallel") return { ...base, lanes: [[], []] };
   if (type === "delay") return { ...base, delayMinutes: 60 };
   if (type === "create_reminder") return { ...base, reminderInDays: 3 };
-  if (type === "ai_score") return { ...base, model: "lead-propensity", field: "score" };
+  if (type === "ai_score") return { ...base, model: "account-propensity", field: "score" };
   return base;
 }
 
 // ---- condition editor (recursive) ------------------------------------------
 
+type Translate = (key: string, vars?: Record<string, string>) => string;
+type FieldKind = "text" | "number" | "date" | "boolean" | "enum" | "reference";
+
+/** Collapse the many metadata field types into a handful of editor "kinds". */
+function fieldKind(type: string | undefined): FieldKind {
+  if (type === "number" || type === "currency" || type === "percent") return "number";
+  if (type === "date" || type === "datetime") return "date";
+  if (type === "boolean") return "boolean";
+  if (type === "enum") return "enum";
+  if (type === "reference") return "reference";
+  return "text"; // string / text / email / phone / url
+}
+
+/** Operators offered per field kind — only the ones that make sense, in a
+ *  sensible order, so the picker isn't a confusing wall of options. */
+const OPS_BY_KIND: Record<FieldKind, string[]> = {
+  text: ["eq", "ne", "contains", "not_contains", "in", "is_empty", "is_not_empty", "changed"],
+  number: ["eq", "ne", "gt", "gte", "lt", "lte", "is_empty", "is_not_empty", "changed"],
+  date: ["eq", "lt", "lte", "gt", "gte", "is_empty", "is_not_empty", "changed"],
+  boolean: ["eq", "changed"],
+  enum: ["eq", "ne", "in", "is_empty", "is_not_empty", "changed"],
+  reference: ["eq", "ne", "is_empty", "is_not_empty", "changed"],
+};
+
+/** Human operator label — date fields read as before/after rather than </>. */
+function opLabel(op: string, kind: FieldKind, t: Translate): string {
+  if (kind === "date") {
+    const map: Record<string, string> = { eq: "auto.op.onDate", lt: "auto.op.before", lte: "auto.op.onBefore", gt: "auto.op.after", gte: "auto.op.onAfter" };
+    if (map[op]) return t(map[op]);
+  }
+  return t(`auto.op.${op}`);
+}
+
+/** The value control adapts to the field kind (number / date / boolean / enum / text). */
+function ConditionValue({
+  leaf,
+  fieldDef,
+  kind,
+  onChange,
+}: {
+  leaf: ConditionLeaf;
+  fieldDef?: CatalogField;
+  kind: FieldKind;
+  onChange: (c: ConditionLeaf) => void;
+}) {
+  const { t } = useI18n();
+  const v = String(leaf.value ?? "");
+  const set = (value: string) => onChange({ ...leaf, value });
+  if (leaf.op === "in") {
+    return <Input value={v} onChange={(e) => set(e.target.value)} placeholder={t("auto.cond.inListPh")} className="h-8 w-44 text-xs" />;
+  }
+  if (fieldDef?.options?.length) {
+    return (
+      <Select value={v} onChange={(e) => set(e.target.value)} className="h-8 w-auto text-xs">
+        <option value="">{t("auto.cond.pickValue")}</option>
+        {fieldDef.options.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </Select>
+    );
+  }
+  if (kind === "boolean") {
+    return (
+      <Select value={v === "false" ? "false" : "true"} onChange={(e) => set(e.target.value)} className="h-8 w-auto text-xs">
+        <option value="true">{t("auto.cond.true")}</option>
+        <option value="false">{t("auto.cond.false")}</option>
+      </Select>
+    );
+  }
+  if (kind === "number") {
+    return <Input type="number" value={v} onChange={(e) => set(e.target.value)} placeholder={t("auto.cond.valuePh")} className="h-8 w-28 text-xs" />;
+  }
+  if (kind === "date") {
+    return <Input type={fieldDef?.type === "datetime" ? "datetime-local" : "date"} value={v} onChange={(e) => set(e.target.value)} className="h-8 w-auto text-xs" />;
+  }
+  if (kind === "reference") {
+    return <Input value={v} onChange={(e) => set(e.target.value)} placeholder={t("auto.cond.refIdPh")} className="h-8 w-32 text-xs" />;
+  }
+  return <Input value={v} onChange={(e) => set(e.target.value)} placeholder={t("auto.cond.valuePh")} className="h-8 w-44 text-xs" />;
+}
+
+/** One "field — operator — value" condition row, type-aware throughout. */
+function ConditionLeafRow({
+  leaf,
+  fields,
+  catalog,
+  onChange,
+  onRemove,
+}: {
+  leaf: ConditionLeaf;
+  fields: CatalogField[];
+  catalog: AutomationCatalog;
+  onChange: (c: ConditionLeaf) => void;
+  onRemove: () => void;
+}) {
+  const { t } = useI18n();
+  const unarySet = new Set(catalog.operators.filter((o) => o.unary).map((o) => o.value));
+  const fieldDef = fields.find((f) => f.name === leaf.field);
+  const kind = fieldKind(fieldDef?.type);
+  const ops = OPS_BY_KIND[kind]
+    .map((v) => catalog.operators.find((o) => o.value === v))
+    .filter((o): o is AutomationCatalog["operators"][number] => Boolean(o));
+  const isUnary = unarySet.has(leaf.op);
+
+  function setField(name: string) {
+    const nk = fieldKind(fields.find((f) => f.name === name)?.type);
+    const allowed = OPS_BY_KIND[nk];
+    const op = (allowed.includes(leaf.op) ? leaf.op : allowed[0]) as ConditionLeaf["op"];
+    onChange({ ...leaf, field: name, op, value: nk === "boolean" ? "true" : "" });
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-border bg-surface/50 p-1.5">
+      <Select value={leaf.field} onChange={(e) => setField(e.target.value)} className="h-8 w-auto min-w-32 text-xs">
+        {fields.length === 0 && <option value="">{t("auto.cond.fieldPh")}</option>}
+        {fields.map((f) => (
+          <option key={f.name} value={f.name}>{f.label}</option>
+        ))}
+      </Select>
+      <Select value={leaf.op} onChange={(e) => onChange({ ...leaf, op: e.target.value as ConditionLeaf["op"], value: unarySet.has(e.target.value) ? "" : leaf.value })} className="h-8 w-auto text-xs">
+        {ops.map((o) => (
+          <option key={o.value} value={o.value}>{opLabel(o.value, kind, t)}</option>
+        ))}
+      </Select>
+      {!isUnary && <ConditionValue leaf={leaf} fieldDef={fieldDef} kind={kind} onChange={onChange} />}
+      <button
+        onClick={onRemove}
+        aria-label={t("auto.cond.removeCondition")}
+        title={t("auto.cond.removeCondition")}
+        className="ml-auto rounded p-1 text-muted-2 hover:bg-danger/10 hover:text-danger"
+      >
+        <Icon name="close" className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+}
+
 function ConditionGroupEditor({
   group,
   onChange,
+  onRemove,
   entity,
   catalog,
   depth = 0,
 }: {
   group: ConditionGroup;
   onChange: (g: ConditionGroup) => void;
+  onRemove?: () => void;
   entity?: CatalogEntity;
   catalog: AutomationCatalog;
   depth?: number;
 }) {
   const { t } = useI18n();
   const fields = entity?.fields ?? [];
-  const unary = new Set(catalog.operators.filter((o) => o.unary).map((o) => o.value));
 
   function setChild(i: number, child: ConditionLeaf | ConditionGroup) {
     const children = [...group.children];
@@ -77,30 +217,40 @@ function ConditionGroupEditor({
   }
 
   return (
-    <div className={cn("rounded-xl border border-border p-2.5", depth > 0 && "bg-surface-2/40")}>
-      <div className="mb-2 flex items-center gap-2">
+    <div className={cn("rounded-xl border p-3", depth > 0 ? "border-border bg-surface-2/40" : "border-border-strong bg-surface/30")}>
+      {/* Match ALL / ANY of these conditions */}
+      <div className="mb-2.5 flex flex-wrap items-center gap-2">
+        <span className="text-xs font-medium text-muted">{depth === 0 ? t("auto.cond.if") : t("auto.cond.subgroup")}</span>
         <div className="glass inline-flex rounded-lg p-0.5 text-xs">
           {(["AND", "OR"] as const).map((l) => (
             <button
               key={l}
               onClick={() => onChange({ ...group, logic: l })}
               className={cn(
-                "rounded-md px-2 py-0.5 font-semibold transition-colors",
+                "rounded-md px-2.5 py-1 font-semibold transition-colors",
                 group.logic === l ? "bg-primary text-primary-foreground" : "text-muted hover:text-foreground",
               )}
             >
-              {l}
+              {l === "AND" ? t("auto.cond.all") : t("auto.cond.any")}
             </button>
           ))}
         </div>
-        <span className="text-xs text-muted-2">
-          {group.children.length === 0
-            ? t("auto.cond.none")
-            : group.logic === "AND"
-              ? t("auto.cond.matchAll")
-              : t("auto.cond.matchAny")}
-        </span>
+        <span className="text-xs text-muted-2">{t("auto.cond.ofThese")}</span>
+        {onRemove && (
+          <button
+            onClick={onRemove}
+            aria-label={t("auto.cond.removeGroup")}
+            title={t("auto.cond.removeGroup")}
+            className="ml-auto rounded p-1 text-muted-2 hover:bg-danger/10 hover:text-danger"
+          >
+            <Icon name="trash" className="h-3.5 w-3.5" />
+          </button>
+        )}
       </div>
+
+      {group.children.length === 0 && (
+        <p className="rounded-lg border border-dashed border-border bg-surface-2/30 px-3 py-2 text-xs text-muted-2">{t("auto.cond.emptyHint")}</p>
+      )}
 
       <div className="space-y-2">
         {group.children.map((child, i) =>
@@ -109,76 +259,25 @@ function ConditionGroupEditor({
               key={i}
               group={child}
               onChange={(g) => setChild(i, g)}
+              onRemove={() => remove(i)}
               entity={entity}
               catalog={catalog}
               depth={depth + 1}
             />
           ) : (
-            <div key={i} className="flex flex-wrap items-center gap-1.5">
-              <Select
-                value={child.field}
-                onChange={(e) => setChild(i, { ...child, field: e.target.value })}
-                className="h-8 w-auto min-w-32 text-xs"
-              >
-                {fields.length === 0 && <option value="">{t("auto.cond.fieldPh")}</option>}
-                {fields.map((f) => (
-                  <option key={f.name} value={f.name}>
-                    {f.label}
-                  </option>
-                ))}
-              </Select>
-              <Select
-                value={child.op}
-                onChange={(e) => setChild(i, { ...child, op: e.target.value as ConditionLeaf["op"] })}
-                className="h-8 w-auto text-xs"
-              >
-                {catalog.operators.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {t(`auto.op.${o.value}`)}
-                  </option>
-                ))}
-              </Select>
-              {!unary.has(child.op) &&
-                (() => {
-                  const fieldDef = fields.find((f) => f.name === child.field);
-                  if (fieldDef?.options?.length) {
-                    return (
-                      <Select
-                        value={String(child.value ?? "")}
-                        onChange={(e) => setChild(i, { ...child, value: e.target.value })}
-                        className="h-8 w-auto text-xs"
-                      >
-                        <option value="">—</option>
-                        {fieldDef.options.map((o) => (
-                          <option key={o.value} value={o.value}>
-                            {o.label}
-                          </option>
-                        ))}
-                      </Select>
-                    );
-                  }
-                  return (
-                    <Input
-                      value={String(child.value ?? "")}
-                      onChange={(e) => setChild(i, { ...child, value: e.target.value })}
-                      placeholder={t("auto.cond.valuePh")}
-                      className="h-8 w-32 text-xs"
-                    />
-                  );
-                })()}
-              <button
-                onClick={() => remove(i)}
-                aria-label="Remove condition"
-                className="ml-auto rounded p-1 text-muted-2 hover:bg-danger/10 hover:text-danger"
-              >
-                <Icon name="close" className="h-3.5 w-3.5" />
-              </button>
-            </div>
+            <ConditionLeafRow
+              key={i}
+              leaf={child}
+              fields={fields}
+              catalog={catalog}
+              onChange={(c) => setChild(i, c)}
+              onRemove={() => remove(i)}
+            />
           ),
         )}
       </div>
 
-      <div className="mt-2 flex gap-1.5">
+      <div className="mt-2.5 flex gap-1.5">
         <Button size="xs" variant="outline" onClick={addLeaf}>
           <Icon name="plus" className="h-3 w-3" /> {t("auto.cond.addCondition")}
         </Button>
@@ -193,6 +292,102 @@ function ConditionGroupEditor({
 }
 
 // ---- action editor (recursive) ---------------------------------------------
+
+const TOKEN_FIELD =
+  "w-full rounded-lg border border-border-strong bg-surface/60 px-3 py-1.5 text-xs text-foreground placeholder:text-muted-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:border-ring";
+
+/** Icon hint for a record field by type (used in the insert-field picker). */
+function fieldIcon(type: string): string {
+  if (type === "email") return "email";
+  if (type === "phone") return "call";
+  if (type === "url") return "globe";
+  if (type === "reference") return "users";
+  if (type === "date" || type === "datetime") return "calendar";
+  return "edit";
+}
+
+/**
+ * Text input / textarea with a "+ field" picker that inserts a `{{record.field}}`
+ * token at the caret — so a user can drop the triggering record's email, name,
+ * etc. into a message without remembering the template syntax. (e.g. for "email
+ * the user that was created", pick the Email field → `{{record.email}}`.)
+ */
+function FieldTokenInput({
+  value,
+  onChange,
+  placeholder,
+  entity,
+  multiline,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  entity?: CatalogEntity;
+  multiline?: boolean;
+}) {
+  const { t } = useI18n();
+  const ref = useRef<HTMLInputElement & HTMLTextAreaElement>(null);
+  const fields = entity?.fields ?? [];
+
+  function insert(name: string) {
+    const token = `{{record.${name}}}`;
+    const el = ref.current;
+    if (el && typeof el.selectionStart === "number") {
+      const start = el.selectionStart;
+      const end = el.selectionEnd ?? start;
+      onChange(value.slice(0, start) + token + value.slice(end));
+      requestAnimationFrame(() => {
+        el.focus();
+        const pos = start + token.length;
+        el.setSelectionRange(pos, pos);
+      });
+    } else {
+      onChange(value ? `${value}${token}` : token);
+    }
+  }
+
+  return (
+    <div className="relative">
+      {multiline ? (
+        <textarea ref={ref} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className={cn(TOKEN_FIELD, "min-h-14 pr-9")} />
+      ) : (
+        <input ref={ref} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className={cn(TOKEN_FIELD, "h-8 pr-9")} />
+      )}
+      {fields.length > 0 && (
+        <div className="absolute right-1 top-1">
+          <DropdownMenu
+            align="end"
+            panelClassName="w-60 max-h-72 overflow-y-auto"
+            trigger={({ toggle }) => (
+              <button
+                type="button"
+                onClick={toggle}
+                title={t("auto.cfg.insertField")}
+                aria-label={t("auto.cfg.insertField")}
+                className="flex h-6 items-center gap-1 rounded-md border border-border bg-surface px-1.5 text-[10px] font-medium text-muted-2 hover:border-primary/40 hover:text-primary"
+              >
+                <Icon name="plus" className="h-3 w-3" /> {t("auto.cfg.field")}
+              </button>
+            )}
+          >
+            {({ close }) => (
+              <>
+                <div className="px-2.5 pb-0.5 pt-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-2">{t("auto.cfg.insertFieldHint")}</div>
+                {fields.map((f) => (
+                  <MenuItem key={f.name} onClick={() => { insert(f.name); close(); }}>
+                    <Icon name={fieldIcon(f.type)} className="h-3.5 w-3.5 text-muted" />
+                    <span className="flex-1 truncate">{f.label}</span>
+                    <code className="text-[10px] text-muted-2">{f.name}</code>
+                  </MenuItem>
+                ))}
+              </>
+            )}
+          </DropdownMenu>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function ActionConfig({
   action,
@@ -219,15 +414,30 @@ function ActionConfig({
       return (
         <div className="space-y-2">
           {action.type !== "notify" && (
-            <Input value={action.to ?? ""} onChange={(e) => set({ to: e.target.value })} placeholder={t("auto.cfg.to")} className="h-8 text-xs" />
+            <div>
+              <Label>{action.type === "send_email" ? t("auto.cfg.toEmail") : t("auto.cfg.to")}</Label>
+              <FieldTokenInput
+                value={action.to ?? ""}
+                onChange={(to) => set({ to })}
+                placeholder={action.type === "send_email" ? t("auto.cfg.toEmailPh") : t("auto.cfg.toPh")}
+                entity={entity}
+              />
+            </div>
           )}
-          <Input value={action.subject ?? ""} onChange={(e) => set({ subject: e.target.value })} placeholder={t("auto.cfg.subject")} className="h-8 text-xs" />
-          <Textarea value={action.body ?? ""} onChange={(e) => set({ body: e.target.value })} placeholder={t("auto.cfg.body")} className="min-h-14 text-xs" />
+          <div>
+            <Label>{t("auto.cfg.subject")}</Label>
+            <FieldTokenInput value={action.subject ?? ""} onChange={(subject) => set({ subject })} placeholder={t("auto.cfg.subject")} entity={entity} />
+          </div>
+          <div>
+            <Label>{t("auto.cfg.body")}</Label>
+            <FieldTokenInput value={action.body ?? ""} onChange={(body) => set({ body })} placeholder={t("auto.cfg.body")} entity={entity} multiline />
+          </div>
+          {entity && entity.fields.length > 0 && <p className="text-[11px] text-muted-2">{t("auto.cfg.tokenHint")}</p>}
         </div>
       );
     case "create_task":
       return (
-        <Input value={action.taskSubject ?? ""} onChange={(e) => set({ taskSubject: e.target.value })} placeholder={t("auto.cfg.taskSubject")} className="h-8 text-xs" />
+        <FieldTokenInput value={action.taskSubject ?? ""} onChange={(taskSubject) => set({ taskSubject })} placeholder={t("auto.cfg.taskSubject")} entity={entity} />
       );
     case "create_reminder":
       return (
@@ -270,24 +480,58 @@ function ActionConfig({
               </option>
             ))}
           </Select>
-          <Input value={action.value ?? ""} onChange={(e) => set({ value: e.target.value })} placeholder={t("auto.cfg.value")} className="h-8 text-xs" />
+          <FieldTokenInput value={action.value ?? ""} onChange={(value) => set({ value })} placeholder={t("auto.cfg.value")} entity={entity} />
         </div>
       );
-    case "create_record":
+    case "create_record": {
+      const target = catalog.entities.find((en) => en.name === action.entity);
+      // Migrate a legacy single field/value into the assignments list on first view.
+      const assignments = action.assignments ?? (action.field ? [{ field: action.field, value: action.value ?? "" }] : []);
+      const setAssignment = (i: number, patch: Partial<{ field: string; value: string }>) =>
+        set({ assignments: assignments.map((a, idx) => (idx === i ? { ...a, ...patch } : a)) });
       return (
-        <div className="grid grid-cols-3 gap-2">
-          <Select value={action.entity ?? ""} onChange={(e) => set({ entity: e.target.value })} className="h-8 text-xs">
-            <option value="">{t("auto.cfg.entity")}</option>
-            {catalog.entities.map((en) => (
-              <option key={en.name} value={en.name}>
-                {en.label}
-              </option>
-            ))}
-          </Select>
-          <Input value={action.field ?? ""} onChange={(e) => set({ field: e.target.value })} placeholder={t("auto.cfg.field")} className="h-8 text-xs" />
-          <Input value={action.value ?? ""} onChange={(e) => set({ value: e.target.value })} placeholder={t("auto.cfg.value")} className="h-8 text-xs" />
+        <div className="space-y-2">
+          <div>
+            <Label>{t("auto.cfg.createEntity")}</Label>
+            <Select value={action.entity ?? ""} onChange={(e) => set({ entity: e.target.value, assignments: [] })} className="h-8 text-xs">
+              <option value="">{t("auto.cfg.entity")}</option>
+              {catalog.entities.map((en) => (
+                <option key={en.name} value={en.name}>{en.label}</option>
+              ))}
+            </Select>
+          </div>
+          {action.entity && (
+            <div className="space-y-1.5">
+              <Label>{t("auto.cfg.setFields")}</Label>
+              {assignments.length === 0 && <p className="text-[11px] text-muted-2">{t("auto.cfg.setFieldsHint")}</p>}
+              {assignments.map((a, i) => (
+                <div key={i} className="flex items-center gap-1.5">
+                  <Select value={a.field} onChange={(e) => setAssignment(i, { field: e.target.value })} className="h-8 w-40 text-xs">
+                    <option value="">{t("auto.cfg.field")}</option>
+                    {(target?.fields ?? []).map((f) => (
+                      <option key={f.name} value={f.name}>{f.label}</option>
+                    ))}
+                  </Select>
+                  <div className="min-w-0 flex-1">
+                    <FieldTokenInput value={a.value} onChange={(value) => setAssignment(i, { value })} placeholder={t("auto.cfg.value")} entity={entity} />
+                  </div>
+                  <button
+                    onClick={() => set({ assignments: assignments.filter((_, idx) => idx !== i) })}
+                    aria-label={t("auto.cfg.removeField")}
+                    className="shrink-0 rounded p-1 text-muted-2 hover:bg-danger/10 hover:text-danger"
+                  >
+                    <Icon name="close" className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
+              <Button size="xs" variant="outline" onClick={() => set({ assignments: [...assignments, { field: "", value: "" }] })}>
+                <Icon name="plus" className="h-3 w-3" /> {t("auto.cfg.addField")}
+              </Button>
+            </div>
+          )}
         </div>
       );
+    }
     case "webhook":
       return (
         <Input value={action.url ?? ""} onChange={(e) => set({ url: e.target.value })} placeholder={t("auto.cfg.urlPh")} className="h-8 text-xs" />
@@ -303,8 +547,8 @@ function ActionConfig({
     case "ai_score":
       return (
         <div className="grid grid-cols-2 gap-2">
-          <Select value={action.model ?? "lead-propensity"} onChange={(e) => set({ model: e.target.value })} className="h-8 text-xs">
-            <option value="lead-propensity">{t("auto.cfg.model.leadProp")}</option>
+          <Select value={action.model ?? "account-propensity"} onChange={(e) => set({ model: e.target.value })} className="h-8 text-xs">
+            <option value="account-propensity">{t("auto.cfg.model.leadProp")}</option>
             <option value="deal-win">{t("auto.cfg.model.dealWin")}</option>
             <option value="churn-risk">{t("auto.cfg.model.churn")}</option>
           </Select>
@@ -416,20 +660,26 @@ function ActionListEditor({
         return (
           <div
             key={action.id}
-            draggable
-            onDragStart={() => setDragIndex(i)}
             onDragOver={(e) => e.preventDefault()}
             onDrop={() => {
               if (dragIndex !== null && dragIndex !== i) move(dragIndex, i);
               setDragIndex(null);
             }}
             className={cn(
-              "rounded-xl border border-border bg-surface p-2.5 shadow-sm backdrop-blur-sm transition-all",
+              "animate-rise rounded-xl border border-border bg-surface p-2.5 shadow-sm backdrop-blur-sm transition-all hover:border-primary/30 hover:shadow-md",
               dragIndex === i && "opacity-50",
             )}
           >
             <div className="flex items-center gap-2">
-              <span className="cursor-grab text-muted-2" title="Drag to reorder">
+              {/* Only the grip is draggable, so the action's buttons (config /
+                  move / remove) stay reliably clickable. */}
+              <span
+                draggable
+                onDragStart={() => setDragIndex(i)}
+                onDragEnd={() => setDragIndex(null)}
+                className="cursor-grab text-muted-2"
+                title="Drag to reorder"
+              >
                 <Icon name="sort" className="h-3.5 w-3.5" />
               </span>
               <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -514,8 +764,10 @@ export function AutomationBuilder({
   );
   const [conditions, setConditions] = useState<ConditionGroup>(rule?.conditions ?? emptyGroup());
   const [actions, setActions] = useState<AutomationAction[]>(rule?.actions ?? []);
-  const [requiresApproval, setRequiresApproval] = useState(rule?.requiresApproval ?? false);
   const [busy, setBusy] = useState(false);
+  // Portal needs a client DOM target; mount-gate avoids SSR/hydration use.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   const entity = catalog.entities.find((e) => e.name === trigger.entity);
 
@@ -526,7 +778,7 @@ export function AutomationBuilder({
     }
     setBusy(true);
     try {
-      const payload = { name, description, trigger, conditions, actions, requiresApproval };
+      const payload = { name, description, trigger, conditions, actions, requiresApproval: false };
       let saved: AutomationRule;
       if (rule) {
         saved = await apiFetch<AutomationRule>(`/automations/${rule.id}`, { method: "PATCH", body: payload });
@@ -556,8 +808,10 @@ export function AutomationBuilder({
     }
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex justify-end">
+  if (!mounted) return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex justify-end">
       <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-sm" onClick={onClose} aria-hidden />
       <div
         role="dialog"
@@ -623,11 +877,32 @@ export function AutomationBuilder({
                 </Select>
               )}
               {trigger.kind === "schedule" && (
-                <Select value={trigger.schedule ?? "daily"} onChange={(e) => setTrigger({ ...trigger, schedule: e.target.value })} className="text-xs">
-                  <option value="hourly">Hourly</option>
-                  <option value="daily">Daily</option>
-                  <option value="weekly">Weekly</option>
+                <Select
+                  value={trigger.schedule ?? "daily"}
+                  onChange={(e) => {
+                    const schedule = e.target.value;
+                    setTrigger({ ...trigger, schedule, everyMinutes: schedule === "minutely" ? (trigger.everyMinutes ?? 5) : trigger.everyMinutes });
+                  }}
+                  className="text-xs"
+                >
+                  <option value="minutely">{t("auto.sched.minutely")}</option>
+                  <option value="hourly">{t("auto.sched.hourly")}</option>
+                  <option value="daily">{t("auto.sched.daily")}</option>
+                  <option value="weekly">{t("auto.sched.weekly")}</option>
                 </Select>
+              )}
+              {trigger.kind === "schedule" && trigger.schedule === "minutely" && (
+                <label className="flex items-center gap-1.5 rounded-lg border border-border-strong bg-surface/60 px-2.5 text-xs text-muted">
+                  {t("auto.sched.every")}
+                  <input
+                    type="number"
+                    min={1}
+                    value={trigger.everyMinutes ?? 5}
+                    onChange={(e) => setTrigger({ ...trigger, everyMinutes: Math.max(1, Number(e.target.value) || 1) })}
+                    className="h-7 w-14 rounded border border-border bg-surface/70 px-1 text-center text-foreground focus:outline-none focus-visible:border-ring"
+                  />
+                  {t("auto.sched.minutesUnit")}
+                </label>
               )}
               {trigger.kind === "inactivity" && (
                 <Input
@@ -658,33 +933,26 @@ export function AutomationBuilder({
             <ActionListEditor actions={actions} onChange={setActions} entity={entity} catalog={catalog} users={users} />
           </FlowNode>
 
-          {/* Governance + versions */}
-          <div className="rounded-xl border border-border p-3">
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={requiresApproval} onChange={(e) => setRequiresApproval(e.target.checked)} className="h-4 w-4 rounded border-border accent-primary" />
-              <Icon name="shield" className="h-3.5 w-3.5 text-muted" />
-              {t("auto.requireApproval")}
-            </label>
-            {rule && rule.versions.length > 1 && (
-              <div className="mt-3">
-                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-2">{t("auto.versionHistory")}</p>
-                <ul className="space-y-1 text-xs">
-                  {rule.versions.slice(0, 6).map((v) => (
-                    <li key={v.version} className="flex items-center justify-between gap-2">
-                      <span>
-                        <Badge tone="neutral">v{v.version}</Badge> {v.note} · {new Date(v.at).toLocaleString()}
-                      </span>
-                      {v.version !== rule.version && (
-                        <button onClick={() => rollback(v.version)} className="font-medium text-primary hover:underline">
-                          {t("auto.rollback")}
-                        </button>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
+          {/* Version history */}
+          {rule && rule.versions.length > 1 && (
+            <div className="rounded-xl border border-border p-3">
+              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-2">{t("auto.versionHistory")}</p>
+              <ul className="space-y-1 text-xs">
+                {rule.versions.slice(0, 6).map((v) => (
+                  <li key={v.version} className="flex items-center justify-between gap-2">
+                    <span>
+                      <Badge tone="neutral">v{v.version}</Badge> {v.note} · {new Date(v.at).toLocaleString()}
+                    </span>
+                    {v.version !== rule.version && (
+                      <button onClick={() => rollback(v.version)} className="font-medium text-primary hover:underline">
+                        {t("auto.rollback")}
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
 
         {/* footer */}
@@ -703,7 +971,8 @@ export function AutomationBuilder({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -720,16 +989,18 @@ function FlowNode({
   subtitle: string;
   children: React.ReactNode;
 }) {
-  const { t } = useI18n();
   return (
-    <div className="glass glass-sheen rounded-2xl p-3.5 shadow-sm">
+    <div
+      className="glass glass-sheen animate-rise rounded-2xl p-3.5 shadow-sm transition-shadow duration-300 hover:shadow-md"
+      style={{ animationDelay: `${step * 90}ms` }}
+    >
       <div className="mb-2.5 flex items-center gap-2.5">
         <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-primary/15 to-secondary/10 text-primary ring-1 ring-primary/15">
           <Icon name={icon} className="h-4 w-4" />
         </span>
         <div>
           <p className="text-sm font-semibold tracking-tight">
-            <span className="text-muted-2">{t("auto.step")} {step} · </span>
+            <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary">{step}</span>{" "}
             {title}
           </p>
           <p className="text-xs text-muted">{subtitle}</p>
@@ -743,7 +1014,7 @@ function FlowNode({
 function FlowConnector() {
   return (
     <div className="flex justify-center" aria-hidden>
-      <span className="h-5 w-px bg-gradient-to-b from-primary/40 to-secondary/40" />
+      <span className="animate-draw-down h-6 w-0.5 rounded-full bg-gradient-to-b from-primary/50 to-secondary/50" />
     </div>
   );
 }

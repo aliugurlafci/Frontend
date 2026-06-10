@@ -21,6 +21,13 @@ export interface RequestContext {
   readonly displayName: string;
   readonly email: string;
   readonly roles: readonly string[];
+  /**
+   * The principal's effective operation grants (matrix-authoritative, from
+   * `/auth/me`). When present, the permission engine uses these instead of
+   * deriving grants from `roles` — so custom per-position grants gate the UI
+   * the same way the backend enforces them. Undefined falls back to role presets.
+   */
+  readonly grants?: readonly string[];
   readonly locale: string;
   readonly featureFlags: Readonly<Record<string, boolean>>;
   readonly correlationId: string;

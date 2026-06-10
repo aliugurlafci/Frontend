@@ -29,6 +29,8 @@ function noteIcon(n: Note): string {
   if (e.startsWith("deal")) return "target";
   if (e.startsWith("lead")) return "lead";
   if (e.startsWith("email")) return "email";
+  if (e.startsWith("purchaseOrder")) return "order";
+  if (e.startsWith("goodsReceipt")) return "stock";
   return n.channel === "email" ? "email" : "bell";
 }
 
@@ -135,12 +137,15 @@ export function NotificationsBell() {
             markRead();
           }}
           aria-label={t("notif.title")}
-          className="relative inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-2 hover:text-foreground"
+          className="relative inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted transition-all hover:bg-surface-2 hover:text-foreground active:scale-95"
         >
           <Icon name="bell" className="h-4 w-4" />
           {unread > 0 && (
-            <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[10px] font-semibold text-white">
-              {unread}
+            <span className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-danger/60" />
+              <span className="relative flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[10px] font-semibold text-white">
+                {unread}
+              </span>
             </span>
           )}
         </button>

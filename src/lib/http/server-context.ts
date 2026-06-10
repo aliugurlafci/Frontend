@@ -16,6 +16,10 @@ export async function getServerContext(): Promise<RequestContext> {
     displayName: me.displayName,
     email: me.email,
     roles: Object.freeze([...me.roles]),
+    // Effective grants from /auth/me (matrix-authoritative) so permission-based
+    // UI gating matches what the backend actually enforces — including custom
+    // per-position grants, not just the base-role presets.
+    grants: Object.freeze([...(me.grants ?? [])]),
     locale: me.locale ?? "en",
     featureFlags: Object.freeze(me.featureFlags ?? {}),
     correlationId: "ssr",

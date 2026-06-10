@@ -11,7 +11,6 @@ import { t } from "@/lib/i18n/messages";
  */
 const DASHBOARDS: { name: string; href: string; icon: string }[] = [
   { name: "sales-dashboard", href: "/sales-dashboard", icon: "trending" },
-  { name: "leads-dashboard", href: "/leads-dashboard", icon: "lead" },
   { name: "deals-dashboard", href: "/deals-dashboard", icon: "target" },
   { name: "inventory-dashboard", href: "/inventory-dashboard", icon: "stock" },
   { name: "accounting-dashboard", href: "/accounting-dashboard", icon: "ledger" },

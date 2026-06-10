@@ -1,17 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api-client";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
 import { Icon } from "@/components/ui/icon";
 import { Input, Select, Label } from "@/components/ui/input";
 import { cn } from "@/lib/utils/cn";
 import { useI18n } from "@/lib/i18n/context";
 import { WebhookManager } from "../automation-admin";
+import { Reveal, Skeleton } from "./anim";
 import type {
   IntegrationConfig,
   IntegrationProviderDef,
@@ -50,8 +51,10 @@ export function IntegrationsTab() {
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 p-8 text-sm text-muted">
-        <Spinner /> {t("auto.loading")}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Skeleton key={i} className="h-40" />
+        ))}
       </div>
     );
   }
@@ -65,25 +68,30 @@ export function IntegrationsTab() {
         <CardBody>
           <p className="mb-3 text-xs text-muted">{t("auto.int.hubDesc")}</p>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {providers.map((p) => {
+            {providers.map((p, idx) => {
               const st = states[p.key];
               const enabled = st?.enabled ?? false;
               return (
-                <div key={p.key} className="glass glass-sheen rounded-2xl p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md">
-                  <div className="flex items-start justify-between">
-                    <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary/15 to-secondary/10 text-primary ring-1 ring-primary/15">
-                      <Icon name={p.icon} className="h-4 w-4" />
-                    </span>
-                    <Badge tone={enabled ? "success" : "neutral"}>
-                      {enabled ? t("auto.int.connected") : t("auto.int.notSet")}
-                    </Badge>
+                <Reveal key={p.key} i={idx} className="h-full">
+                  <div className="glass glass-sheen group h-full rounded-2xl p-4 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-md">
+                    <div className="flex items-start justify-between">
+                      <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary/15 to-secondary/10 text-primary ring-1 ring-primary/15 transition-transform duration-300 group-hover:scale-110">
+                        <Icon name={p.icon} className="h-4 w-4" />
+                      </span>
+                      <Badge tone={enabled ? "success" : "neutral"}>
+                        <span className="flex items-center gap-1">
+                          {enabled && <span className="h-1.5 w-1.5 rounded-full bg-success animate-soft-pulse" />}
+                          {enabled ? t("auto.int.connected") : t("auto.int.notSet")}
+                        </span>
+                      </Badge>
+                    </div>
+                    <h3 className="mt-3 text-sm font-semibold">{providerName(p.key, p.name)}</h3>
+                    <p className="mt-0.5 text-xs text-muted">{p.description}</p>
+                    <Button size="sm" variant="secondary" className="mt-3 w-full" onClick={() => setEditing(p.key)}>
+                      <Icon name="settings" className="h-3.5 w-3.5" /> {t("auto.int.configure")}
+                    </Button>
                   </div>
-                  <h3 className="mt-3 text-sm font-semibold">{providerName(p.key, p.name)}</h3>
-                  <p className="mt-0.5 text-xs text-muted">{p.description}</p>
-                  <Button size="sm" variant="secondary" className="mt-3 w-full" onClick={() => setEditing(p.key)}>
-                    <Icon name="settings" className="h-3.5 w-3.5" /> {t("auto.int.configure")}
-                  </Button>
-                </div>
+                </Reveal>
               );
             })}
           </div>
@@ -131,6 +139,9 @@ function IntegrationEditor({
   const [config, setConfig] = useState<IntegrationConfig>({ ...(state?.config ?? {}) });
   const [busy, setBusy] = useState(false);
   const [testing, setTesting] = useState(false);
+  // Portal needs a client DOM target; mount-gate avoids SSR/hydration use.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   const set = (key: string, value: string | number | boolean) => setConfig((c) => ({ ...c, [key]: value }));
   const hasSecrets = def.fields.some((f) => f.secret);
@@ -163,8 +174,10 @@ function IntegrationEditor({
     }
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex justify-end">
+  if (!mounted) return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex justify-end">
       <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-sm" onClick={onClose} aria-hidden />
       <div
         role="dialog"
@@ -271,6 +284,7 @@ function IntegrationEditor({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

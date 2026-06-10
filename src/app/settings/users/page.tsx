@@ -15,7 +15,11 @@ export default async function UsersPage() {
       email: String(u.email ?? ""),
       displayName: String(u.displayName ?? ""),
       positionId: String(u.positionId ?? ""),
+      managerId: u.managerId ? String(u.managerId) : "",
+      phone: (u.phone as string | null) ?? "",
+      jobTitle: (u.jobTitle as string | null) ?? "",
       active: u.active !== false,
+      twoFactorEnabled: Boolean(u.twoFactorEnabled),
     }));
     return <UsersAdmin initial={users} positions={positions} />;
   } catch {

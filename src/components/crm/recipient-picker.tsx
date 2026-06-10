@@ -12,7 +12,7 @@ export interface Recipient {
   id: string;
   name: string;
   email: string;
-  type: "contact" | "employee" | "account";
+  type: "employee" | "account";
 }
 
 type Row = Record<string, unknown>;
@@ -24,9 +24,8 @@ const SOURCES: {
   icon: string;
   name: (r: Row) => string;
 }[] = [
-  { type: "contact", entity: "contact", labelKey: "email.recipients.contacts", icon: "user", name: (r) => `${r.firstName ?? ""} ${r.lastName ?? ""}`.trim() },
-  { type: "employee", entity: "employee", labelKey: "email.recipients.employees", icon: "employee", name: (r) => `${r.firstName ?? ""} ${r.lastName ?? ""}`.trim() },
   { type: "account", entity: "account", labelKey: "email.recipients.accounts", icon: "building", name: (r) => String(r.name ?? "") },
+  { type: "employee", entity: "employee", labelKey: "email.recipients.employees", icon: "employee", name: (r) => `${r.firstName ?? ""} ${r.lastName ?? ""}`.trim() },
 ];
 
 /** Modal to pick one or many recipients from the system's customers, employees and companies. */
@@ -46,7 +45,7 @@ export function RecipientPicker({
   const [all, setAll] = useState<Recipient[]>([]);
   const [search, setSearch] = useState("");
   const [picked, setPicked] = useState<Set<string>>(new Set());
-  const [activeType, setActiveType] = useState<Recipient["type"]>("contact");
+  const [activeType, setActiveType] = useState<Recipient["type"]>("account");
 
   useEffect(() => {
     if (!open) return;
