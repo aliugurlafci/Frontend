@@ -14,6 +14,9 @@ const currency = new Intl.NumberFormat("en-US", {
 /** Format a value for display; `locale` localizes enums + booleans (default EN). */
 export function formatValue(field: FieldDef, value: FieldValue, locale: Locale = "en"): string {
   if (value === null || value === undefined || value === "") return "—";
+  // A personPicker value is a raw "kind:id" ref — callers resolve it to a person
+  // name; never surface the machine token from the generic fallback.
+  if (field.personPicker) return "—";
   switch (field.type) {
     case "currency":
       return typeof value === "number" ? currency.format(value) : String(value);

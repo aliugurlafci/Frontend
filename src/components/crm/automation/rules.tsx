@@ -12,6 +12,7 @@ import { DropdownMenu, MenuItem } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils/cn";
 import { useI18n } from "@/lib/i18n/context";
 import { AutomationBuilder } from "./builder";
+import { RunRuleDialog } from "./run-rule-dialog";
 import type { AutomationCatalog, AutomationRule, AutomationStatus, CatalogUser, LiveActivity, QueueDrainResult } from "./types";
 import { ACTION_ICON, STATUS_TONE, TRIGGER_ICON } from "./types";
 import { Reveal, AnimatedBar, Skeleton } from "./anim";
@@ -31,6 +32,7 @@ export function RulesTab({ catalog, users }: { catalog: AutomationCatalog; users
   const { t } = useI18n();
   const [rules, setRules] = useState<AutomationRule[] | null>(null);
   const [builder, setBuilder] = useState<{ rule: AutomationRule | null } | null>(null);
+  const [runDialog, setRunDialog] = useState<AutomationRule | null>(null);
   const [live, setLive] = useState<LiveActivity>({ running: [], recent: [] });
   const [runningNow, setRunningNow] = useState(false);
 
@@ -89,10 +91,23 @@ export function RulesTab({ catalog, users }: { catalog: AutomationCatalog; users
     }
   }
 
-  async function runTest(rule: AutomationRule) {
+  /** Run the rule on demand for real (performs its actions against live data).
+   *  Event rules need a record to interpolate {{record.*}} against, so open the
+   *  record picker; schedule/inactivity/webhook rules have no record and run
+   *  straight away. */
+  async function runRule(rule: AutomationRule) {
+    if (rule.trigger.kind === "event" && rule.trigger.entity) {
+      setRunDialog(rule);
+      return;
+    }
     try {
-      const run = await apiFetch<{ status: string; steps: unknown[] }>(`/automations/${rule.id}/run`, { method: "POST", body: {} });
-      toast.success(t("auto.toast.testRun", { status: run.status, n: String(run.steps.length) }));
+      const run = await apiFetch<{ status: string; steps: unknown[] }>(`/automations/${rule.id}/run`, {
+        method: "POST",
+        body: { test: false },
+      });
+      if (run.status === "failed") toast.error(t("auto.toast.runFailed", { name: rule.name }));
+      else toast.success(t("auto.toast.run", { status: t(`auto.status.${run.status}`), n: String(run.steps.length) }));
+      load();
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -240,19 +255,19 @@ export function RulesTab({ catalog, users }: { catalog: AutomationCatalog; users
                       <MenuItem onClick={() => { setBuilder({ rule }); close(); }}>
                         <Icon name="edit" className="h-3.5 w-3.5" /> {t("auto.menu.edit")}
                       </MenuItem>
-                      <MenuItem onClick={() => { runTest(rule); close(); }}>
-                        <Icon name="activity" className="h-3.5 w-3.5" /> {t("auto.menu.test")}
+                      <MenuItem onClick={() => { runRule(rule); close(); }}>
+                        <Icon name="zap" className="h-3.5 w-3.5" /> {t("auto.menu.run")}
                       </MenuItem>
                       <MenuItem onClick={() => { duplicate(rule); close(); }}>
                         <Icon name="plus" className="h-3.5 w-3.5" /> {t("auto.menu.duplicate")}
                       </MenuItem>
                       {rule.status !== "active" ? (
                         <MenuItem onClick={() => { setStatus(rule, "active"); close(); }}>
-                          <Icon name="send" className="h-3.5 w-3.5" /> {t("auto.menu.activate")}
+                          <Icon name="play" className="h-3.5 w-3.5" /> {t("auto.menu.activate")}
                         </MenuItem>
                       ) : (
                         <MenuItem onClick={() => { setStatus(rule, "paused"); close(); }}>
-                          <Icon name="lock" className="h-3.5 w-3.5" /> {t("auto.menu.pause")}
+                          <Icon name="pause" className="h-3.5 w-3.5" /> {t("auto.menu.pause")}
                         </MenuItem>
                       )}
                       <MenuItem danger onClick={() => { remove(rule); close(); }}>
@@ -327,6 +342,15 @@ export function RulesTab({ catalog, users }: { catalog: AutomationCatalog; users
             setBuilder(null);
             load();
           }}
+        />
+      )}
+
+      {runDialog && (
+        <RunRuleDialog
+          rule={runDialog}
+          catalog={catalog}
+          onClose={() => setRunDialog(null)}
+          onRan={load}
         />
       )}
     </div>

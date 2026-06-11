@@ -138,7 +138,7 @@ export function RecordDrawer({
       if (e instanceof ApiRequestError) {
         setErrors(e.fieldErrors());
         toast.error(e.message);
-      } else toast.error("Update failed");
+      } else toast.error(t("common.somethingWrong"));
     } finally {
       setBusy(false);
     }
@@ -182,10 +182,24 @@ export function RecordDrawer({
 
   const title = record ? String(record[entity.titleField] ?? entityName) : entityName;
 
+  /** True when the inline edit form has changes that haven't been saved. */
+  function isDirty(): boolean {
+    if (!editing || !record) return false;
+    return editableFields(entity, record).some(
+      (f) => JSON.stringify(record[f.name] ?? null) !== JSON.stringify(form[f.name] ?? null),
+    );
+  }
+
+  /** Guard accidental close (Escape / backdrop / ✕) when there are unsaved edits. */
+  function requestClose() {
+    if (isDirty() && !window.confirm(t("drawer.unsavedConfirm"))) return;
+    onClose();
+  }
+
   return (
     <Drawer
       open={recordId !== null}
-      onClose={onClose}
+      onClose={requestClose}
       title={title}
       footer={
         record && !editing && canDelete ? (
@@ -261,15 +275,15 @@ export function RecordDrawer({
                 <dl className="space-y-2">
                   {entity.fields.map((f) => {
                     const refLabel =
-                      f.type === "reference" && record[f.name]
+                      (f.type === "reference" || f.personPicker) && record[f.name]
                         ? lookups.options[f.name]?.find((o) => o.value === String(record[f.name]))?.label
                         : undefined;
                     return (
                       <div key={f.name} className="flex justify-between gap-4 border-b border-border pb-1.5">
                         <dt className="text-xs text-muted">{fieldLabel(f, entity.name)}</dt>
                         <dd className="text-right text-sm">
-                          {f.type === "reference" ? (
-                            // Show the referenced record's name, never the raw id.
+                          {f.type === "reference" || f.personPicker ? (
+                            // Show the resolved person/record name, never the raw ref.
                             <span>{refLabel ?? "—"}</span>
                           ) : (
                             <ValueCell field={f} value={record[f.name] ?? null} locale={locale} />

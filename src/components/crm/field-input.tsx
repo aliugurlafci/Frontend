@@ -45,7 +45,7 @@ export function FieldInput({
             </option>
           ))}
         </Select>
-      ) : field.type === "reference" ? (
+      ) : field.type === "reference" || field.personPicker ? (
         <Select id={id} invalid={invalid} value={str} onChange={(e) => onChange(e.target.value || null)}>
           <option value="">—</option>
           {/* Keep the current value visible even if options haven't loaded yet. */}

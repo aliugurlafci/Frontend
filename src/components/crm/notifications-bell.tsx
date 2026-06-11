@@ -54,14 +54,16 @@ export function NotificationsBell() {
   const [items, setItems] = useState<Note[]>([]);
   const [unread, setUnread] = useState(0);
   const [checked, setChecked] = useState<Set<string>>(new Set());
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   async function load() {
     try {
       const r = await apiFetch<{ items: Note[]; unread: number }>("/notifications");
       setItems(r.items);
       setUnread(r.unread);
-      // Drop any selections whose notifications no longer exist.
+      // Drop any selection/expansion whose notification no longer exists.
       setChecked((prev) => new Set([...prev].filter((id) => r.items.some((n) => n.id === id))));
+      setExpanded((prev) => new Set([...prev].filter((id) => r.items.some((n) => n.id === id))));
     } catch {
       /* ignore */
     }
@@ -97,6 +99,7 @@ export function NotificationsBell() {
     const removedUnread = items.filter((n) => idSet.has(n.id) && !n.read).length;
     setItems((prev) => prev.filter((n) => !idSet.has(n.id)));
     setChecked((prev) => new Set([...prev].filter((id) => !idSet.has(id))));
+    setExpanded((prev) => new Set([...prev].filter((id) => !idSet.has(id))));
     setUnread((u) => Math.max(0, u - removedUnread));
     try {
       await apiFetch("/notifications/delete", { method: "POST", body: { ids } });
@@ -108,6 +111,16 @@ export function NotificationsBell() {
 
   function toggleCheck(id: string) {
     setChecked((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  }
+
+  /** Expand/collapse a notification to read its full detail inline. */
+  function toggleExpand(id: string) {
+    setExpanded((prev) => {
       const n = new Set(prev);
       if (n.has(id)) n.delete(id);
       else n.add(id);
@@ -201,48 +214,72 @@ export function NotificationsBell() {
             ) : (
               items.map((n) => {
                 const isChecked = checked.has(n.id);
+                const isExpanded = expanded.has(n.id);
                 return (
                   <div
                     key={n.id}
                     className={cn(
-                      "group flex items-start gap-2 px-2.5 py-1.5 transition-colors hover:bg-surface-2",
+                      "group px-2.5 py-1.5 transition-colors hover:bg-surface-2",
                       !n.read && "bg-primary/[0.04]",
                     )}
                   >
-                    <button
-                      onClick={() => toggleCheck(n.id)}
-                      aria-label={t("notif.selectAll")}
-                      className={cn(
-                        "mt-1.5 h-3.5 w-3.5 shrink-0 rounded border transition-opacity",
-                        isChecked
-                          ? "border-primary bg-primary opacity-100"
-                          : "border-border-strong opacity-0 group-hover:opacity-100",
-                      )}
-                    />
-                    <button
-                      onClick={() => openNote(n, close)}
-                      disabled={!n.href}
-                      className={cn("flex min-w-0 flex-1 items-start gap-2 text-left", n.href ? "cursor-pointer" : "cursor-default")}
-                    >
-                      <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-surface-2 text-muted">
-                        <Icon name={noteIcon(n)} className="h-3.5 w-3.5" />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="flex items-center gap-1.5">
-                          <span className={cn("truncate text-sm text-foreground", !n.read && "font-semibold")}>{n.subject}</span>
-                          {!n.read && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />}
-                          <span className="ml-auto shrink-0 text-[10px] text-muted-2">{fmtAgo(n.at, locale)}</span>
+                    <div className="flex items-start gap-2">
+                      <button
+                        onClick={() => toggleCheck(n.id)}
+                        aria-label={t("notif.selectAll")}
+                        className={cn(
+                          "mt-1.5 h-3.5 w-3.5 shrink-0 rounded border transition-opacity",
+                          isChecked
+                            ? "border-primary bg-primary opacity-100"
+                            : "border-border-strong opacity-0 group-hover:opacity-100",
+                        )}
+                      />
+                      <button
+                        onClick={() => toggleExpand(n.id)}
+                        aria-expanded={isExpanded}
+                        className="flex min-w-0 flex-1 cursor-pointer items-start gap-2 text-left"
+                      >
+                        <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-surface-2 text-muted">
+                          <Icon name={noteIcon(n)} className="h-3.5 w-3.5" />
                         </span>
-                        <span className="mt-0.5 block truncate text-xs text-muted">{n.body}</span>
-                      </span>
-                    </button>
-                    <button
-                      onClick={() => deleteIds([n.id])}
-                      aria-label={t("common.delete")}
-                      className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-2 opacity-0 transition-opacity hover:bg-danger/10 hover:text-danger group-hover:opacity-100"
-                    >
-                      <Icon name="close" className="h-3.5 w-3.5" />
-                    </button>
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-center gap-1.5">
+                            <span className={cn("truncate text-sm text-foreground", !n.read && "font-semibold")}>{n.subject}</span>
+                            {!n.read && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />}
+                            <span className="ml-auto shrink-0 text-[10px] text-muted-2">{fmtAgo(n.at, locale)}</span>
+                            <Icon name={isExpanded ? "chevronDown" : "chevronRight"} className="h-3 w-3 shrink-0 text-muted-2" />
+                          </span>
+                          {!isExpanded && <span className="mt-0.5 block truncate text-xs text-muted">{n.body}</span>}
+                        </span>
+                      </button>
+                      <button
+                        onClick={() => deleteIds([n.id])}
+                        aria-label={t("common.delete")}
+                        className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-2 opacity-0 transition-opacity hover:bg-danger/10 hover:text-danger group-hover:opacity-100"
+                      >
+                        <Icon name="close" className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+
+                    {isExpanded && (
+                      <div className="ml-7 mt-1.5 space-y-1.5 border-l-2 border-border pl-2.5">
+                        <p className="whitespace-pre-wrap break-words text-xs text-foreground">{n.body}</p>
+                        <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-muted-2">
+                          <span>{new Date(n.at).toLocaleString(locale)}</span>
+                          {n.eventType && (
+                            <span className="rounded bg-surface-2 px-1.5 py-0.5 font-medium">{n.eventType}</span>
+                          )}
+                        </div>
+                        {n.href && (
+                          <button
+                            onClick={() => openNote(n, close)}
+                            className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                          >
+                            {t("notif.open")} <Icon name="chevronRight" className="h-3 w-3" />
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })

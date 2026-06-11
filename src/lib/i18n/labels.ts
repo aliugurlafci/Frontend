@@ -249,6 +249,15 @@ export function entityLabel(def: EntityDef, locale: Locale, opts?: { plural?: bo
   return plural ? def.pluralLabel : def.label;
 }
 
+/** Localized entity label from just the entity NAME (+ an English fallback) —
+ *  for callers that don't have a full EntityDef, e.g. the automation catalog. */
+export function entityLabelByName(name: string, fallback: string, locale: Locale, opts?: { plural?: boolean }): string {
+  if (locale === "en") return fallback;
+  const pair = ENTITY[locale]?.[name];
+  if (pair) return opts?.plural ? pair.p : pair.s;
+  return fallback;
+}
+
 /** Localized field label, falling back to the metadata label. */
 export function fieldLabel(field: FieldDef, locale: Locale, entityName?: string): string {
   if (locale === "en") return field.label;

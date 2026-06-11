@@ -12,7 +12,7 @@ import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Input, Select, Label } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Icon } from "@/components/ui/icon";
-import { resolveProduct, useBarcodeScanner, playBeep } from "@/lib/pos/scanner";
+import { resolveProduct, useBarcodeScanner, playBeep, newIdempotencyKey } from "@/lib/pos/scanner";
 import { ScannerChip } from "@/components/crm/scanner-chip";
 import type { EntityRecord } from "@/lib/metadata/types";
 
@@ -52,6 +52,9 @@ export function ReturnsView({
   const [search, setSearch] = useState("");
   const [busy, setBusy] = useState(false);
   const scanRef = useRef<HTMLInputElement>(null);
+  // Idempotency token for the current return (reset after a confirmed submit) so
+  // a double-submit can't create two returns / double-restock.
+  const idemRef = useRef<string>("");
   // The product just added — briefly highlights its line as scan feedback.
   const [flashId, setFlashId] = useState<string | null>(null);
 
@@ -161,9 +164,11 @@ export function ReturnsView({
       return;
     }
     setBusy(true);
+    if (!idemRef.current) idemRef.current = newIdempotencyKey();
     try {
       const res = await apiFetch<{ doc: EntityRecord }>("/sales-returns", {
         method: "POST",
+        headers: { "Idempotency-Key": idemRef.current },
         body: {
           accountId: accountId || null,
           warehouseId: warehouseId || null,
@@ -173,6 +178,7 @@ export function ReturnsView({
           lines,
         },
       });
+      idemRef.current = ""; // confirmed → fresh token for the next return
       const id = String(res.doc.id);
       if (post) {
         await apiFetch(`/sales-returns/${id}/post`, { method: "POST", body: {} });

@@ -53,8 +53,8 @@ export function DataTable({
     showSorterTooltip: false,
     render: (_value: unknown, record: EntityRecord) => (
       <span className={c.name === titleField ? "font-medium" : undefined}>
-        {c.type === "reference" ? (
-          // Never show the raw id — render the referenced record's name (or —).
+        {c.type === "reference" || c.personPicker ? (
+          // Never show the raw id/ref — render the resolved person/record name (or —).
           <span>{refLabel?.(c.name, record[c.name] ?? null) ?? "—"}</span>
         ) : (
           <ValueCell field={c} value={record[c.name] ?? null} locale={locale} />

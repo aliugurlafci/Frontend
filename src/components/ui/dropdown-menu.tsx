@@ -60,6 +60,38 @@ export function DropdownMenu({
     };
   }, [open, align]);
 
+  // On open, move focus to the first menu item (skip panels that lead with a
+  // text input — e.g. a field picker — so typing isn't hijacked).
+  useEffect(() => {
+    if (!open) return;
+    const id = requestAnimationFrame(() => {
+      const panel = panelRef.current;
+      if (!panel || panel.querySelector("input, textarea")) return;
+      panel.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
+    });
+    return () => cancelAnimationFrame(id);
+  }, [open, coords]);
+
+  // Arrow-key roving focus between menu items (WAI-ARIA menu pattern).
+  const onPanelKeyDown = (e: React.KeyboardEvent) => {
+    const items = Array.from(panelRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []);
+    if (!items.length) return;
+    const current = items.indexOf(document.activeElement as HTMLElement);
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      items[(current + 1) % items.length]?.focus();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      items[(current - 1 + items.length) % items.length]?.focus();
+    } else if (e.key === "Home") {
+      e.preventDefault();
+      items[0]?.focus();
+    } else if (e.key === "End") {
+      e.preventDefault();
+      items[items.length - 1]?.focus();
+    }
+  };
+
   useEffect(() => {
     if (!open) return;
     const onPointer = (e: MouseEvent) => {
@@ -87,6 +119,10 @@ export function DropdownMenu({
         createPortal(
           <div
             ref={panelRef}
+            role="menu"
+            aria-orientation="vertical"
+            tabIndex={-1}
+            onKeyDown={onPanelKeyDown}
             style={{ position: "fixed", top: coords.top, bottom: coords.bottom, left: coords.left, right: coords.right, maxHeight: coords.maxHeight }}
             className={cn(
               // z-[110] keeps the menu above modals/drawers (z-[100]) so a menu
@@ -114,10 +150,13 @@ export function MenuItem({
 }) {
   return (
     <button
+      type="button"
+      role="menuitem"
+      tabIndex={-1}
       onClick={onClick}
       className={cn(
-        "flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm transition-colors hover:bg-surface-2",
-        danger ? "text-danger hover:bg-danger/10" : "text-foreground",
+        "flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm outline-none transition-colors hover:bg-surface-2 focus:bg-surface-2 focus-visible:ring-2 focus-visible:ring-primary/40",
+        danger ? "text-danger hover:bg-danger/10 focus:bg-danger/10" : "text-foreground",
       )}
     >
       {children}

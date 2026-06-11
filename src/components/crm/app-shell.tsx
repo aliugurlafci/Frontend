@@ -26,7 +26,10 @@ const PUBLIC_PREFIXES = [
 ];
 const isPublic = (p: string) => PUBLIC_PREFIXES.some((x) => p === x || p.startsWith(`${x}/`));
 
-/** Non-entity screens added to the grouped nav (key === screen key === route). */
+/** Non-entity screens added to the grouped nav (key === screen key === route).
+ *  `pluralLabel` here is only an English fallback — the rendered label always
+ *  comes from the localized `nav.<name>` key (see the `t(locale, …)` override
+ *  below), so update messages.ts (en/tr/de), not these strings. */
 const NAV_EXTRAS: NavItem[] = [
   // Note: the dashboard screens (sales/leads/deals/project/executive/revenue/growth)
   // are no longer listed here — they surface as cards on the home Pano

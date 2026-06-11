@@ -11,7 +11,7 @@ import { formatMoney } from "@/lib/finance/money";
 import { docTotals, lineTotals } from "@/lib/finance/totals";
 import { useT } from "@/lib/i18n/client";
 import { cn } from "@/lib/utils/cn";
-import { resolveProduct, useBarcodeScanner, playBeep } from "@/lib/pos/scanner";
+import { resolveProduct, useBarcodeScanner, playBeep, newIdempotencyKey } from "@/lib/pos/scanner";
 import { ScannerChip } from "@/components/crm/scanner-chip";
 import type { EntityRecord } from "@/lib/metadata/types";
 
@@ -43,6 +43,10 @@ export function PosTerminal() {
   const [busy, setBusy] = useState(false);
   const [flashId, setFlashId] = useState<string | null>(null);
   const scanRef = useRef<HTMLInputElement>(null);
+  // Idempotency token for the current sale: a double-submit (or a retry after a
+  // lost response) reuses it so the server never rings up two invoices. Reset
+  // after a confirmed sale so the next checkout starts a fresh token.
+  const idemRef = useRef<string>("");
   // Keep a live ref of products so the global scanner always resolves against
   // the latest list without re-subscribing the window listener.
   const productsRef = useRef<EntityRecord[]>([]);
@@ -197,9 +201,11 @@ export function PosTerminal() {
       return;
     }
     setBusy(true);
+    if (!idemRef.current) idemRef.current = newIdempotencyKey();
     try {
       const res = await apiFetch<{ invoice: EntityRecord; total: number; paid: number; change: number }>("/pos/checkout", {
         method: "POST",
+        headers: { "Idempotency-Key": idemRef.current },
         body: {
           branchId: branchId || null,
           warehouseId: warehouseId || null,
@@ -210,6 +216,7 @@ export function PosTerminal() {
           payments: Number(tendered) > 0 ? [{ method: payMethod, amount: Number(tendered) }] : [{ method: payMethod, amount: totals.total }],
         },
       });
+      idemRef.current = ""; // confirmed sale → next checkout uses a fresh token
       toast.success(t("pos.saleDone", { number: String(res.invoice.number), change: money(res.change) }));
       if (session) {
         try {

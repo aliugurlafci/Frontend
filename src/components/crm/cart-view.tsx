@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Select, Label } from "@/components/ui/input";
 import { Icon } from "@/components/ui/icon";
-import { resolveProduct, useBarcodeScanner, playBeep } from "@/lib/pos/scanner";
+import { resolveProduct, useBarcodeScanner, playBeep, newIdempotencyKey } from "@/lib/pos/scanner";
 import { ScannerChip } from "@/components/crm/scanner-chip";
 import type { EntityRecord } from "@/lib/metadata/types";
 
@@ -48,6 +48,9 @@ export function CartView({
   const [busy, setBusy] = useState(false);
   const [savedCarts, setSavedCarts] = useState<EntityRecord[]>([]);
   const scanRef = useRef<HTMLInputElement>(null);
+  // Idempotency token for the current checkout (reset after a confirmed sale) so
+  // a double-submit can't ring up two invoices for the same basket.
+  const idemRef = useRef<string>("");
   // The product just added — briefly highlights its basket line as scan feedback.
   const [flashId, setFlashId] = useState<string | null>(null);
 
@@ -217,9 +220,15 @@ export function CartView({
   async function checkout() {
     if (!lines.length) return;
     setBusy(true);
+    if (!idemRef.current) idemRef.current = newIdempotencyKey();
     try {
       const id = await persist();
-      const res = await apiFetch<{ invoice: EntityRecord }>(`/carts/${id}/checkout`, { method: "POST", body: {} });
+      const res = await apiFetch<{ invoice: EntityRecord }>(`/carts/${id}/checkout`, {
+        method: "POST",
+        headers: { "Idempotency-Key": idemRef.current },
+        body: {},
+      });
+      idemRef.current = ""; // confirmed → next checkout uses a fresh token
       toast.success(t("cart.checkoutDone"));
       reset();
       await loadSaved();

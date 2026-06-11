@@ -33,12 +33,18 @@ export function Drawer({
 
   useEffect(() => {
     if (!open) return;
+    // Remember what had focus so we can return it when the drawer closes
+    // (otherwise keyboard/screen-reader focus is dropped to <body>).
+    const previouslyFocused = document.activeElement as HTMLElement | null;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     document.addEventListener("keydown", onKey);
     panelRef.current?.focus();
-    return () => document.removeEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      previouslyFocused?.focus?.();
+    };
   }, [open, onClose]);
 
   if (!open || !mounted) return null;

@@ -402,7 +402,7 @@ function ActionConfig({
   catalog: AutomationCatalog;
   users: CatalogUser[];
 }) {
-  const { t } = useI18n();
+  const { t, entityLabelByName } = useI18n();
   const set = (patch: Partial<AutomationAction>) => onChange({ ...action, ...patch });
   const fields = entity?.fields ?? [];
 
@@ -496,7 +496,7 @@ function ActionConfig({
             <Select value={action.entity ?? ""} onChange={(e) => set({ entity: e.target.value, assignments: [] })} className="h-8 text-xs">
               <option value="">{t("auto.cfg.entity")}</option>
               {catalog.entities.map((en) => (
-                <option key={en.name} value={en.name}>{en.label}</option>
+                <option key={en.name} value={en.name}>{entityLabelByName(en.name, en.label)}</option>
               ))}
             </Select>
           </div>
@@ -756,7 +756,7 @@ export function AutomationBuilder({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const { t } = useI18n();
+  const { t, entityLabelByName } = useI18n();
   const [name, setName] = useState(rule?.name ?? "");
   const [description, setDescription] = useState(rule?.description ?? "");
   const [trigger, setTrigger] = useState<AutomationTrigger>(
@@ -770,6 +770,20 @@ export function AutomationBuilder({
   useEffect(() => setMounted(true), []);
 
   const entity = catalog.entities.find((e) => e.name === trigger.entity);
+
+  // Pristine snapshot captured on first render; used to warn before discarding
+  // unsaved edits when the builder is closed (backdrop / ✕ / Cancel).
+  const initialRef = useRef<string | null>(null);
+  if (initialRef.current === null) {
+    initialRef.current = JSON.stringify({ name, description, trigger, conditions, actions });
+  }
+  function isDirty(): boolean {
+    return initialRef.current !== JSON.stringify({ name, description, trigger, conditions, actions });
+  }
+  function requestClose() {
+    if (isDirty() && !window.confirm(t("auto.unsavedConfirm"))) return;
+    onClose();
+  }
 
   async function save(activate: boolean) {
     if (!name.trim()) {
@@ -812,7 +826,7 @@ export function AutomationBuilder({
 
   return createPortal(
     <div className="fixed inset-0 z-[100] flex justify-end">
-      <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-sm" onClick={onClose} aria-hidden />
+      <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-sm" onClick={requestClose} aria-hidden />
       <div
         role="dialog"
         aria-modal="true"
@@ -830,7 +844,7 @@ export function AutomationBuilder({
               {rule && <p className="text-xs text-muted">{t("auto.builder.versionInfo", { v: String(rule.version), n: String(rule.versions.length) })}</p>}
             </div>
           </div>
-          <button onClick={onClose} aria-label="Close" className="flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-surface-2 hover:text-foreground">
+          <button onClick={requestClose} aria-label="Close" className="flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-surface-2 hover:text-foreground">
             ✕
           </button>
         </div>
@@ -862,7 +876,7 @@ export function AutomationBuilder({
                 <Select value={trigger.entity ?? ""} onChange={(e) => setTrigger({ ...trigger, entity: e.target.value })} className="text-xs">
                   {catalog.entities.map((en) => (
                     <option key={en.name} value={en.name}>
-                      {en.label}
+                      {entityLabelByName(en.name, en.label)}
                     </option>
                   ))}
                 </Select>
@@ -959,7 +973,7 @@ export function AutomationBuilder({
         <div className="flex items-center justify-between gap-2 border-t border-border p-4">
           <span className="text-xs text-muted">{t("auto.footer.actions", { n: String(actions.length) })}</span>
           <div className="flex gap-2">
-            <Button variant="ghost" onClick={onClose}>
+            <Button variant="ghost" onClick={requestClose}>
               {t("common.cancel")}
             </Button>
             <Button variant="secondary" loading={busy} onClick={() => save(false)}>

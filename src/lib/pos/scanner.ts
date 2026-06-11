@@ -9,6 +9,16 @@ import type { EntityRecord } from "@/lib/metadata/types";
  * first (instant, no round-trip), then the POS lookup endpoint for products
  * beyond the preloaded list. Returns `null` when nothing matches.
  */
+/**
+ * A fresh idempotency token for a checkout. `crypto.randomUUID()` needs a secure
+ * context (HTTPS/localhost) and throws otherwise, so we fall back to a random
+ * string when it's unavailable (e.g. the dev server reached over a LAN IP).
+ */
+export function newIdempotencyKey(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  return `idem_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+}
+
 export async function resolveProduct(products: EntityRecord[], code: string): Promise<EntityRecord | null> {
   const c = code.trim();
   if (!c) return null;
