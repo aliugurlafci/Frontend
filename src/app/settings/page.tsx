@@ -236,7 +236,7 @@ export default async function SettingsPage() {
             </div>
             <div className="flex flex-wrap gap-2">
               {importable.map((e, i) => (
-                <span key={e.name} className="animate-rise" style={{ animationDelay: `${Math.min(i * 25, 300)}ms` }}>
+                <span key={e.name} className="animate-fade" style={{ animationDelay: `${Math.min(i * 25, 300)}ms` }}>
                   <ExportMenu entity={e.name} label={e.label} />
                 </span>
               ))}

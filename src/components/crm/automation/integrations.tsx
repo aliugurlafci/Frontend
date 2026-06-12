@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api-client";
@@ -8,7 +8,7 @@ import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
-import { Input, Select, Label } from "@/components/ui/input";
+import { Input, Select, Label, Textarea } from "@/components/ui/input";
 import { cn } from "@/lib/utils/cn";
 import { useI18n } from "@/lib/i18n/context";
 import { WebhookManager } from "../automation-admin";
@@ -139,12 +139,20 @@ function IntegrationEditor({
   const [config, setConfig] = useState<IntegrationConfig>({ ...(state?.config ?? {}) });
   const [busy, setBusy] = useState(false);
   const [testing, setTesting] = useState(false);
+  // Optional recipient for a live test send (SMS gateway).
+  const [testTo, setTestTo] = useState("");
   // Portal needs a client DOM target; mount-gate avoids SSR/hydration use.
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
   const set = (key: string, value: string | number | boolean) => setConfig((c) => ({ ...c, [key]: value }));
-  const hasSecrets = def.fields.some((f) => f.secret);
+  // Show only the fields that apply to the current selection (a field's `showWhen`
+  // matches its controlling value, e.g. provider/system/authType). Recomputed on
+  // every change so picking a provider instantly swaps in its parameter set.
+  const visibleFields = def.fields.filter(
+    (f) => !f.showWhen || f.showWhen.in.includes(String(config[f.showWhen.field] ?? "")),
+  );
+  const hasSecrets = visibleFields.some((f) => f.secret);
 
   async function save() {
     setBusy(true);
@@ -164,7 +172,7 @@ function IntegrationEditor({
     try {
       // Persist first so the test reflects the current form.
       await apiFetch(`/automation/integrations/${def.key}`, { method: "PATCH", body: { enabled, config } });
-      const r = await apiFetch<{ ok: boolean; message: string }>(`/automation/integrations/${def.key}/test`, { method: "POST", body: {} });
+      const r = await apiFetch<{ ok: boolean; message: string }>(`/automation/integrations/${def.key}/test`, { method: "POST", body: { to: testTo.trim() || undefined } });
       if (r.ok) toast.success(r.message);
       else toast.error(r.message);
     } catch (e) {
@@ -212,15 +220,22 @@ function IntegrationEditor({
             </span>
           </button>
 
-          {/* Dynamic fields */}
+          {/* Dynamic fields — only those that apply to the selected provider,
+              grouped into labelled sections. */}
           <div className="space-y-3">
-            {def.fields.map((f) => {
+            {visibleFields.map((f, idx) => {
               const value = config[f.key];
+              const showHeader = !!f.group && f.group !== (idx > 0 ? visibleFields[idx - 1].group : undefined);
+
+              let control: ReactNode;
               if (f.type === "boolean") {
                 const on = value === true || value === "true";
-                return (
-                  <label key={f.key} className="flex items-center justify-between gap-2 text-sm">
-                    <span>{f.label}</span>
+                control = (
+                  <label className="flex items-center justify-between gap-2 text-sm">
+                    <span>
+                      {f.label}
+                      {f.required && <span className="ml-0.5 text-danger">*</span>}
+                    </span>
                     <button
                       type="button"
                       onClick={() => set(f.key, !on)}
@@ -231,11 +246,10 @@ function IntegrationEditor({
                     </button>
                   </label>
                 );
-              }
-              if (f.type === "select") {
-                return (
-                  <div key={f.key}>
-                    <Label>{f.label}</Label>
+              } else if (f.type === "select") {
+                control = (
+                  <div>
+                    <Label required={f.required}>{f.label}</Label>
                     <Select value={String(value ?? "")} onChange={(e) => set(f.key, e.target.value)}>
                       <option value="">—</option>
                       {f.options?.map((o) => (
@@ -244,20 +258,47 @@ function IntegrationEditor({
                         </option>
                       ))}
                     </Select>
+                    {f.help && <p className="mt-0.5 text-xs text-muted-2">{f.help}</p>}
+                  </div>
+                );
+              } else if (f.type === "textarea") {
+                control = (
+                  <div>
+                    <Label required={f.required}>{f.label}</Label>
+                    <Textarea
+                      value={value === undefined || value === null ? "" : String(value)}
+                      placeholder={f.placeholder}
+                      rows={4}
+                      className="font-mono text-xs"
+                      onChange={(e) => set(f.key, e.target.value)}
+                    />
+                    {f.help && <p className="mt-0.5 text-xs text-muted-2">{f.help}</p>}
+                  </div>
+                );
+              } else {
+                control = (
+                  <div>
+                    <Label required={f.required}>{f.label}</Label>
+                    <Input
+                      type={f.type === "password" ? "password" : f.type === "number" ? "number" : "text"}
+                      value={value === undefined || value === null ? "" : String(value)}
+                      placeholder={f.placeholder}
+                      autoComplete={f.secret ? "new-password" : undefined}
+                      onChange={(e) => set(f.key, f.type === "number" ? Number(e.target.value) : e.target.value)}
+                    />
+                    {f.help && <p className="mt-0.5 text-xs text-muted-2">{f.help}</p>}
                   </div>
                 );
               }
+
               return (
-                <div key={f.key}>
-                  <Label>{f.label}</Label>
-                  <Input
-                    type={f.type === "password" ? "password" : f.type === "number" ? "number" : "text"}
-                    value={value === undefined || value === null ? "" : String(value)}
-                    placeholder={f.placeholder}
-                    autoComplete={f.secret ? "new-password" : undefined}
-                    onChange={(e) => set(f.key, f.type === "number" ? Number(e.target.value) : e.target.value)}
-                  />
-                  {f.help && <p className="mt-0.5 text-xs text-muted-2">{f.help}</p>}
+                <div key={f.key} className="space-y-3">
+                  {showHeader && (
+                    <h4 className="border-t border-border pt-3 text-xs font-semibold uppercase tracking-wide text-muted-2">
+                      {f.group}
+                    </h4>
+                  )}
+                  {control}
                 </div>
               );
             })}
@@ -267,6 +308,14 @@ function IntegrationEditor({
             <p className="rounded-xl border border-border bg-surface-2/40 px-3 py-2 text-xs text-muted">
               <Icon name="shield" className="mr-1 inline h-3.5 w-3.5" /> {t("auto.int.secretNote")}
             </p>
+          )}
+
+          {(def.key === "sms" || def.key === "whatsapp") && (
+            <div className="rounded-xl border border-dashed border-border bg-surface-2/30 p-3">
+              <Label>{t("auto.int.testRecipient")}</Label>
+              <Input type="tel" value={testTo} placeholder="+90..." onChange={(e) => setTestTo(e.target.value)} />
+              <p className="mt-0.5 text-xs text-muted-2">{t("auto.int.testRecipientHelp")}</p>
+            </div>
           )}
         </div>
 

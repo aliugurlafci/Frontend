@@ -304,7 +304,7 @@ export const TRIGGER_ICON: Record<TriggerKind, string> = {
 
 // ---- integrations -----------------------------------------------------------
 
-export type IntegrationFieldType = "text" | "password" | "number" | "boolean" | "select";
+export type IntegrationFieldType = "text" | "password" | "number" | "boolean" | "select" | "textarea";
 
 export interface IntegrationField {
   key: string;
@@ -313,6 +313,12 @@ export interface IntegrationField {
   placeholder?: string;
   options?: { value: string; label: string }[];
   secret?: boolean;
+  /** Required for a working connection (shown with a * and checked on Test). */
+  required?: boolean;
+  /** Section header the field is grouped under in the editor. */
+  group?: string;
+  /** Only show/validate this field when another field holds one of these values. */
+  showWhen?: { field: string; in: string[] };
   help?: string;
 }
 
@@ -323,6 +329,8 @@ export interface IntegrationProviderDef {
   icon: string;
   description: string;
   fields: IntegrationField[];
+  /** Groups of field keys where at least one must be supplied. */
+  requireOneOf?: string[][];
 }
 
 export type IntegrationConfig = Record<string, string | number | boolean>;

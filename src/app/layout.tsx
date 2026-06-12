@@ -17,6 +17,10 @@ const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"]
 export const metadata: Metadata = {
   title: "Aula CRM",
   description: "Metadata-driven, multi-tenant CRM",
+  // Indexable by search engines. (Authenticated app routes redirect
+  // unauthenticated visitors — including crawlers — to /login, so private data
+  // never reaches the index even though pages are not explicitly noindex.)
+  robots: { index: true, follow: true },
 };
 
 // Runs before paint to apply theme + accent + density + text size + motion from

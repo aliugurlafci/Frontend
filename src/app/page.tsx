@@ -50,7 +50,14 @@ const sumMeasure = (rows: AggregateRow[], key: string) => rows.reduce((s, r) => 
 
 export default async function DashboardPage() {
   const ctx = await getServerContext();
+  const me = await serverApi.me();
   const t = await getT();
+  // The "Recent activity" card surfaces the same audit trail as the standalone
+  // /activity page, so it's gated by the same "activity" screen permission
+  // (Settings → Roles & Permissions). Admins always see it; otherwise the
+  // user's position must grant the "activity" screen. `me` is request-cached,
+  // so this shares AppShell's single /auth/me round-trip.
+  const canViewActivity = me.roles.includes("admin") || me.screens.includes("activity");
   const dealEntity = metadata.getEntity("deal");
   const stageField = dealEntity.fields.find((f) => f.name === "stage")!;
   const nameField = dealEntity.fields.find((f) => f.name === "name")!;
@@ -77,7 +84,7 @@ export default async function DashboardPage() {
     serverApi.list("deal", { pageSize: 500, sort: [{ field: "amount", dir: "desc" }] }).catch(() => ({ items: [] as EntityRecord[] })),
     safeList("product", 500),
     safeList("branch", 200),
-    serverApi.activity(8).catch(() => []),
+    canViewActivity ? serverApi.activity(8).catch(() => []) : Promise.resolve([]),
   ]);
 
   // --- KPIs ---
@@ -198,7 +205,7 @@ export default async function DashboardPage() {
         </Card>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className={`grid gap-4 ${canViewActivity ? "lg:grid-cols-2" : ""}`}>
         <Card>
           <CardHeader
             title={t("dash.topDeals")}
@@ -235,22 +242,24 @@ export default async function DashboardPage() {
           </Table>
         </Card>
 
-        <Card>
-          <CardHeader title={t("dash.recentActivity")} />
-          <CardBody>
-            <ol className="space-y-2.5 border-l border-border pl-3">
-              {activity.map((a) => (
-                <li key={a.id} className="relative text-xs">
-                  <span className="absolute -left-[1.45rem] top-1 h-1.5 w-1.5 rounded-full bg-primary" />
-                  <span className="text-foreground">{a.summary}</span>{" "}
-                  <Badge tone="neutral">{a.entity}</Badge>
-                  <div className="text-muted">{new Date(a.at).toLocaleString()}</div>
-                </li>
-              ))}
-              {activity.length === 0 && <li className="text-xs text-muted">{t("dash.noActivity")}</li>}
-            </ol>
-          </CardBody>
-        </Card>
+        {canViewActivity && (
+          <Card>
+            <CardHeader title={t("dash.recentActivity")} />
+            <CardBody>
+              <ol className="space-y-2.5 border-l border-border pl-3">
+                {activity.map((a) => (
+                  <li key={a.id} className="relative text-xs">
+                    <span className="absolute -left-[1.45rem] top-1 h-1.5 w-1.5 rounded-full bg-primary" />
+                    <span className="text-foreground">{a.summary}</span>{" "}
+                    <Badge tone="neutral">{a.entity}</Badge>
+                    <div className="text-muted">{new Date(a.at).toLocaleString()}</div>
+                  </li>
+                ))}
+                {activity.length === 0 && <li className="text-xs text-muted">{t("dash.noActivity")}</li>}
+              </ol>
+            </CardBody>
+          </Card>
+        )}
       </div>
     </div>
   );

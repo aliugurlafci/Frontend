@@ -33,10 +33,16 @@ export function RepublishButton() {
   );
 }
 
-interface ImportResult {
-  created: string[];
+interface ImportJobView {
+  jobId: string;
+  status: "running" | "done" | "error";
+  total: number;
+  processed: number;
+  created: number;
+  failed: number;
   errors: { row: number; message: string }[];
-  ignored?: string[];
+  ignored: string[];
+  message?: string;
 }
 
 /** Read a file as base64 (without the data: prefix) — for binary .xlsx uploads. */
@@ -57,13 +63,13 @@ export function ImportForm({ entities }: { entities: { name: string; label: stri
   const [payload, setPayload] = useState<{ csv: string } | { xlsx: string } | null>(null);
   const [fileName, setFileName] = useState("");
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<ImportResult | null>(null);
+  const [job, setJob] = useState<ImportJobView | null>(null);
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     setFileName(file.name);
-    setResult(null);
+    setJob(null);
     setPayload(XLSX_RE.test(file.name) ? { xlsx: await fileToBase64(file) } : { csv: await file.text() });
   }
 
@@ -73,7 +79,7 @@ export function ImportForm({ entities }: { entities: { name: string; label: stri
       return;
     }
     setBusy(true);
-    setResult(null);
+    setJob(null);
     try {
       // Send the localized field labels the UI shows as aliases, so a file headed
       // in the user's language (e.g. "Ad", "E-posta") still maps to the fields.
@@ -83,12 +89,25 @@ export function ImportForm({ entities }: { entities: { name: string; label: stri
         if (f.readOnly || f.computed) continue;
         aliases[fieldLabel(f, def?.name)] = f.name;
       }
-      const r = await apiFetch<ImportResult>(`/import/${entity}`, { method: "POST", body: { ...payload, aliases } });
-      setResult(r);
-      if (r.errors.length === 0) {
-        toast.success(t("settings.admin.imported", { created: String(r.created.length), errors: String(r.errors.length) }));
+      // Kick off a background job (returns immediately) and poll it, so a large
+      // import isn't bound to one request that a proxy/DB timeout could abort.
+      const started = await apiFetch<ImportJobView>(`/import/${entity}/job`, {
+        method: "POST",
+        body: { ...payload, aliases },
+      });
+      setJob(started);
+      let current = started;
+      while (current.status === "running") {
+        await new Promise((r) => setTimeout(r, 1000));
+        current = await apiFetch<ImportJobView>(`/import/${entity}/job/${started.jobId}`);
+        setJob(current);
+      }
+      if (current.status === "error") {
+        toast.error(current.message || t("settings.admin.importing"));
       } else {
-        toast.error(t("settings.admin.imported", { created: String(r.created.length), errors: String(r.errors.length) }));
+        const args = { created: String(current.created), errors: String(current.failed) };
+        if (current.failed === 0) toast.success(t("settings.admin.imported", args));
+        else toast.error(t("settings.admin.imported", args));
       }
     } catch (e) {
       toast.error((e as Error).message);
@@ -136,32 +155,45 @@ export function ImportForm({ entities }: { entities: { name: string; label: stri
         <div className="space-y-1.5">
           <div className="flex items-center gap-2 text-xs text-muted">
             <Icon name="recurring" className="h-3.5 w-3.5 animate-spin text-primary" />
-            {t("settings.admin.importing")} {fileName && `(${fileName})`}
+            {job && job.total > 0
+              ? t("settings.admin.importProgress", { processed: String(job.processed), total: String(job.total) })
+              : t("settings.admin.importing")}{" "}
+            {fileName && `(${fileName})`}
           </div>
-          <div className="h-1 w-full animate-pulse rounded-full bg-primary/50" />
+          {job && job.total > 0 ? (
+            <div className="h-1 w-full overflow-hidden rounded-full bg-surface-2">
+              <div
+                className="h-full rounded-full bg-primary transition-all duration-500"
+                style={{ width: `${Math.round((job.processed / job.total) * 100)}%` }}
+              />
+            </div>
+          ) : (
+            <div className="h-1 w-full animate-pulse rounded-full bg-primary/50" />
+          )}
         </div>
       )}
 
-      {result && !busy && (
+      {job && !busy && (
         <div className="animate-rise rounded-xl border border-border bg-surface-2/40 p-3 text-xs">
           <div className="flex flex-wrap items-center gap-2">
             <span className="flex items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 font-medium text-success">
-              <Icon name="checkmark" className="h-3 w-3" /> {t("settings.admin.createdRecords", { count: String(result.created.length) })}
+              <Icon name="checkmark" className="h-3 w-3" /> {t("settings.admin.createdRecords", { count: String(job.created) })}
             </span>
-            {result.errors.length > 0 && (
+            {job.failed > 0 && (
               <span className="flex items-center gap-1 rounded-full bg-danger/10 px-2 py-0.5 font-medium text-danger">
-                <Icon name="close" className="h-3 w-3" /> {t("settings.admin.failedRecords", { count: String(result.errors.length) })}
+                <Icon name="close" className="h-3 w-3" /> {t("settings.admin.failedRecords", { count: String(job.failed) })}
               </span>
             )}
           </div>
-          {result.ignored && result.ignored.length > 0 && (
+          {job.status === "error" && job.message && <p className="mt-1.5 text-danger">{job.message}</p>}
+          {job.ignored.length > 0 && (
             <p className="mt-1.5 text-warning">
-              {t("settings.admin.ignoredColumns", { cols: result.ignored.join(", ") })}
+              {t("settings.admin.ignoredColumns", { cols: job.ignored.join(", ") })}
             </p>
           )}
-          {result.errors.length > 0 && (
+          {job.errors.length > 0 && (
             <ul className="mt-2 max-h-36 space-y-0.5 overflow-y-auto pr-1 text-danger">
-              {result.errors.map((er, i) => (
+              {job.errors.map((er, i) => (
                 <li key={i}>{t("settings.admin.rowError", { row: String(er.row), message: er.message })}</li>
               ))}
             </ul>
