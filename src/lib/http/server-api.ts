@@ -224,7 +224,35 @@ export const serverApi = {
     const { users } = await request<{ users: Record<string, unknown>[] }>(`/admin/users`);
     return users;
   },
+
+  /** Mobile screen catalog (full web catalog flagged with mobile support; admin only). */
+  mobileScreens: async (): Promise<MobileScreenDef[]> => {
+    const { screens } = await request<{ screens: MobileScreenDef[] }>(`/mobile/screens`);
+    return screens;
+  },
+
+  /** Configured mobile screen-visibility rules (admin only). */
+  mobileConfigs: async (): Promise<MobileConfigRow[]> => {
+    const { configs } = await request<{ configs: MobileConfigRow[] }>(`/mobile/configs`);
+    return configs;
+  },
 };
+
+export interface MobileScreenDef extends ScreenDef {
+  mobileImplemented: boolean;
+}
+
+export interface MobileConfigRow {
+  id: string;
+  clientId: string;
+  positionId: string | null;
+  userId: string | null;
+  screens: string[];
+  hiddenFields: Record<string, string[]>;
+  active: boolean;
+  version: number;
+  updatedAt: string;
+}
 
 export interface PermissionCatalog {
   entities: { name: string; group: string; actions: string[] }[];

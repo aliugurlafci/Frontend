@@ -22,6 +22,7 @@ const SECTIONS: { href: string; key: string; icon: string }[] = [
   { href: "/settings/appearance", key: "appearance", icon: "settings" },
   { href: "/settings/roles", key: "roles", icon: "shield" },
   { href: "/settings/users", key: "users", icon: "users" },
+  { href: "/settings/mobile", key: "mobile", icon: "smartphone" },
 ];
 
 /** Icon shown for each feature flag. */

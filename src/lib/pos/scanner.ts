@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { apiFetch } from "@/lib/api-client";
+import { barcodeCandidates } from "@/lib/barcode/check-digit";
 import type { EntityRecord } from "@/lib/metadata/types";
 
 /**
@@ -20,12 +21,15 @@ export function newIdempotencyKey(): string {
 }
 
 export async function resolveProduct(products: EntityRecord[], code: string): Promise<EntityRecord | null> {
-  const c = code.trim();
-  if (!c) return null;
-  const local = products.find((p) => String(p.barcode ?? "") === c || String(p.sku ?? "") === c);
+  const candidates = barcodeCandidates(code);
+  if (!candidates.length) return null;
+  // Match the preloaded list against every equivalent symbology form of the scan
+  // (UPC-A/EAN-13/UPC-E), then the raw value as a SKU.
+  const forms = new Set(candidates);
+  const local = products.find((p) => forms.has(String(p.barcode ?? "")) || String(p.sku ?? "") === candidates[0]);
   if (local) return local;
   try {
-    const { product } = await apiFetch<{ product: EntityRecord }>(`/pos/lookup?code=${encodeURIComponent(c)}`);
+    const { product } = await apiFetch<{ product: EntityRecord }>(`/pos/lookup?code=${encodeURIComponent(candidates[0])}`);
     return product ?? null;
   } catch {
     // 404 / no read access — treat as "not found", caller decides how to surface.
