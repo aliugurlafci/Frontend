@@ -73,7 +73,9 @@ function normalize(initial: unknown): Prefs {
   };
 }
 
-export function NotificationsForm({ initial }: { initial: unknown }) {
+/** `canUpdate` is the `settings.notifications:update` grant — without it the
+ *  preferences render read-only (the backend rejects the write either way). */
+export function NotificationsForm({ initial, canUpdate = true }: { initial: unknown; canUpdate?: boolean }) {
   const { t } = useI18n();
   const [prefs, setPrefs] = useState<Prefs>(() => normalize(initial));
   const [busy, setBusy] = useState(false);
@@ -103,7 +105,7 @@ export function NotificationsForm({ initial }: { initial: unknown }) {
   }
 
   return (
-    <>
+    <div className={cn("space-y-4", !canUpdate && "pointer-events-none opacity-60")}>
       {/* Master controls */}
       <Card>
         <CardHeader title={t("settings.notifications.controls")} />
@@ -207,11 +209,13 @@ export function NotificationsForm({ initial }: { initial: unknown }) {
         </CardBody>
       </Card>
 
-      <div className="flex justify-end">
-        <Button variant="primary" loading={busy} onClick={save}>
-          {t("common.save")}
-        </Button>
-      </div>
-    </>
+      {canUpdate && (
+        <div className="flex justify-end">
+          <Button variant="primary" loading={busy} onClick={save}>
+            {t("common.save")}
+          </Button>
+        </div>
+      )}
+    </div>
   );
 }

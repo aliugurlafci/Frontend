@@ -2,12 +2,14 @@ import Link from "next/link";
 import { getServerContext } from "@/lib/http/server-context";
 import { metadata } from "@/lib/metadata";
 import { FEATURE_FLAGS, type FeatureFlag } from "@/lib/config/feature-flags";
+import { settingsAccess } from "@/lib/permissions/settings-access";
 import { serverApi } from "@/lib/http/server-api";
 import { getT, getLocale } from "@/lib/i18n/server";
 import { entityLabel } from "@/lib/i18n/labels";
 import { cn } from "@/lib/utils/cn";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
 import { ImportForm } from "@/components/crm/settings-admin";
 import { ExportMenu } from "@/components/crm/export-menu";
@@ -15,14 +17,15 @@ import { CopyField, MetadataExplorer, type EntitySummary } from "@/components/cr
 
 export const dynamic = "force-dynamic";
 
-const SECTIONS: { href: string; key: string; icon: string }[] = [
-  { href: "/settings/profile", key: "profile", icon: "user" },
-  { href: "/settings/security", key: "security", icon: "lock" },
-  { href: "/settings/notifications", key: "notifications", icon: "bell" },
-  { href: "/settings/appearance", key: "appearance", icon: "settings" },
-  { href: "/settings/roles", key: "roles", icon: "shield" },
-  { href: "/settings/users", key: "users", icon: "users" },
-  { href: "/settings/mobile", key: "mobile", icon: "smartphone" },
+/** Hub cards. `area` is the settings grant that decides whether the card shows. */
+const SECTIONS: { href: string; key: string; icon: string; area: string }[] = [
+  { href: "/settings/profile", key: "profile", icon: "user", area: "settings.profile" },
+  { href: "/settings/security", key: "security", icon: "lock", area: "settings.security" },
+  { href: "/settings/notifications", key: "notifications", icon: "bell", area: "settings.notifications" },
+  { href: "/settings/appearance", key: "appearance", icon: "settings", area: "settings.appearance" },
+  { href: "/settings/roles", key: "roles", icon: "shield", area: "settings.roles" },
+  { href: "/settings/users", key: "users", icon: "users", area: "settings.users" },
+  { href: "/settings/mobile", key: "mobile", icon: "smartphone", area: "settings.mobile" },
 ];
 
 /** Icon shown for each feature flag. */
@@ -68,7 +71,16 @@ export default async function SettingsPage() {
   const ctx = await getServerContext();
   const t = await getT();
   const locale = await getLocale();
-  const isAdmin = ctx.roles.includes("admin");
+  // Every card below is gated on its own settings grant, so a position sees the
+  // sections it was given and nothing else.
+  const access = settingsAccess(ctx);
+  const sections = SECTIONS.filter((s) => access.can(s.area, "read"));
+  const canWorkspace = access.can("settings.workspace", "read");
+  const canFlags = access.can("settings.featureFlags", "read");
+  const canMetadata = access.can("settings.metadata", "read");
+  const canImport = access.can("settings.import", "read");
+  const canExport = access.can("settings.export", "read");
+  const canReleases = access.can("settings.releases", "read");
   const entities = metadata.listEntities();
   // Importable / exportable = every non-system (non-line-item) entity, derived live
   // from the published model — so the list can never go stale or miss an entity.
@@ -77,7 +89,7 @@ export default async function SettingsPage() {
     .filter((e) => !e.system)
     .map((e) => ({ name: e.name, label: entityLabel(e, locale, { plural: true }) }))
     .sort((a, b) => a.label.localeCompare(b.label, locale));
-  const releases = isAdmin ? await serverApi.releases().catch(() => []) : [];
+  const releases = canReleases ? await serverApi.releases().catch(() => []) : [];
 
   const entitySummaries: EntitySummary[] = entities.map((e) => ({
     name: e.name,
@@ -106,7 +118,7 @@ export default async function SettingsPage() {
 
       {/* Settings sections */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {SECTIONS.map((s) => (
+        {sections.map((s) => (
           <Link
             key={s.href}
             href={s.href}
@@ -124,15 +136,19 @@ export default async function SettingsPage() {
         ))}
       </div>
 
+      {(canWorkspace || canFlags) && (
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Account */}
+        {canWorkspace && (
         <Card>
           <CardHeader
             title={t("settings.account")}
             action={
-              <Link href="/settings/profile" className="text-xs font-medium text-primary hover:underline">
-                {t("settings.manageProfile")} →
-              </Link>
+              access.can("settings.profile", "read") ? (
+                <Link href="/settings/profile" className="text-xs font-medium text-primary hover:underline">
+                  {t("settings.manageProfile")} →
+                </Link>
+              ) : undefined
             }
           />
           <CardBody className="space-y-4">
@@ -163,8 +179,10 @@ export default async function SettingsPage() {
             </div>
           </CardBody>
         </Card>
+        )}
 
         {/* Feature flags */}
+        {canFlags && (
         <Card>
           <CardHeader
             title={t("settings.featureFlags")}
@@ -203,15 +221,25 @@ export default async function SettingsPage() {
             })}
           </CardBody>
         </Card>
+        )}
       </div>
+      )}
 
       {/* Metadata explorer */}
-      <MetadataExplorer version={metadata.version} entities={entitySummaries} isAdmin={isAdmin} />
+      {canMetadata && (
+        <MetadataExplorer
+          version={metadata.version}
+          entities={entitySummaries}
+          canPublish={access.can("settings.metadata", "publish")}
+        />
+      )}
 
       {/* Import / Export */}
+      {(canImport || canExport) && (
       <Card>
         <CardHeader title={t("settings.importExport")} />
         <CardBody className="space-y-5">
+          {canImport && (
           <section>
             <div className="mb-2 flex items-center gap-2.5">
               <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-surface-2 text-muted">
@@ -222,10 +250,12 @@ export default async function SettingsPage() {
                 <p className="text-xs text-muted">{t("settings.importDesc")}</p>
               </div>
             </div>
-            <ImportForm entities={importable} />
+            <ImportForm entities={importable} disabled={!access.can("settings.import", "execute")} />
           </section>
+          )}
 
-          <section className="border-t border-border pt-4">
+          {canExport && (
+          <section className={canImport ? "border-t border-border pt-4" : undefined}>
             <div className="mb-2.5 flex items-center gap-2.5">
               <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-surface-2 text-muted">
                 <Icon name="download" className="h-4 w-4" />
@@ -235,18 +265,25 @@ export default async function SettingsPage() {
                 <p className="text-xs text-muted">{t("settings.exportDesc")}</p>
               </div>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {importable.map((e, i) => (
-                <span key={e.name} className="animate-fade" style={{ animationDelay: `${Math.min(i * 25, 300)}ms` }}>
-                  <ExportMenu entity={e.name} label={e.label} />
-                </span>
-              ))}
-            </div>
+            {access.can("settings.export", "execute") ? (
+              <div className="flex flex-wrap gap-2">
+                {importable.map((e, i) => (
+                  <span key={e.name} className="animate-fade" style={{ animationDelay: `${Math.min(i * 25, 300)}ms` }}>
+                    <ExportMenu entity={e.name} label={e.label} />
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-2">{t("settings.readOnly")}</p>
+            )}
           </section>
+          )}
         </CardBody>
       </Card>
+      )}
 
       {/* Release / audit trail */}
+      {canReleases && (
       <Card>
         <CardHeader
           title={t("settings.releaseTrail")}
@@ -284,6 +321,15 @@ export default async function SettingsPage() {
           )}
         </CardBody>
       </Card>
+      )}
+
+      {sections.length === 0 && !canWorkspace && !canFlags && !canMetadata && !canImport && !canExport && !canReleases && (
+        <Card>
+          <CardBody>
+            <EmptyState icon="shield" title={t("settings.denied.title")} description={t("settings.denied.none")} />
+          </CardBody>
+        </Card>
+      )}
     </div>
   );
 }

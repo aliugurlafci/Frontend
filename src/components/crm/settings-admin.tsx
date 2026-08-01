@@ -57,7 +57,9 @@ function fileToBase64(file: File): Promise<string> {
 
 const XLSX_RE = /\.(xlsx|xls)$/i;
 
-export function ImportForm({ entities }: { entities: { name: string; label: string }[] }) {
+/** `disabled` reflects the `settings.import:execute` grant — a position may be
+ *  allowed to see the import section without being allowed to run an import. */
+export function ImportForm({ entities, disabled = false }: { entities: { name: string; label: string }[]; disabled?: boolean }) {
   const { t, fieldLabel } = useI18n();
   const [entity, setEntity] = useState(entities[0]?.name ?? "");
   const [payload, setPayload] = useState<{ csv: string } | { xlsx: string } | null>(null);
@@ -121,7 +123,7 @@ export function ImportForm({ entities }: { entities: { name: string; label: stri
       <div className="grid gap-2 sm:grid-cols-3 sm:items-end">
         <div>
           <Label htmlFor="imp-entity">{t("settings.admin.entity")}</Label>
-          <Select id="imp-entity" value={entity} onChange={(e) => setEntity(e.target.value)} disabled={busy}>
+          <Select id="imp-entity" value={entity} onChange={(e) => setEntity(e.target.value)} disabled={busy || disabled}>
             {entities.map((e) => (
               <option key={e.name} value={e.name}>
                 {e.label}
@@ -134,12 +136,12 @@ export function ImportForm({ entities }: { entities: { name: string; label: stri
           <Input
             id="imp-file"
             type="file"
-            disabled={busy}
+            disabled={busy || disabled}
             accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
             onChange={onFile}
           />
         </div>
-        <Button variant="primary" size="sm" loading={busy} onClick={run}>
+        <Button variant="primary" size="sm" loading={busy} disabled={disabled} onClick={run}>
           {t("settings.admin.import")} {fileName && `(${fileName})`}
         </Button>
       </div>

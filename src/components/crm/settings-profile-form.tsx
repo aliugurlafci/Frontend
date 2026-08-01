@@ -29,7 +29,17 @@ interface ProfileInitial {
   bio: string;
 }
 
-export function ProfileForm({ initial }: { initial: ProfileInitial }) {
+/** `canUpdate` / `canChangeAvatar` mirror the `settings.profile:update` and
+ *  `settings.profile:avatar` grants — without them the form renders read-only. */
+export function ProfileForm({
+  initial,
+  canUpdate = true,
+  canChangeAvatar = true,
+}: {
+  initial: ProfileInitial;
+  canUpdate?: boolean;
+  canChangeAvatar?: boolean;
+}) {
   const router = useRouter();
   const { t } = useI18n();
   const [displayName, setDisplayName] = useState(initial.displayName);
@@ -79,10 +89,12 @@ export function ProfileForm({ initial }: { initial: ProfileInitial }) {
     }
     setBusy(true);
     try {
-      await apiFetch("/auth/profile", {
-        method: "PATCH",
-        body: { displayName, email, phone, timezone, avatarId, jobTitle, location, bio },
-      });
+      // Send only what the caller is granted — the two halves (profile fields vs.
+      // the avatar) are separate grants and the backend rejects the rest.
+      const body: Record<string, unknown> = {};
+      if (canUpdate) Object.assign(body, { displayName, email, phone, timezone, jobTitle, location, bio });
+      if (canChangeAvatar) body.avatarId = avatarId;
+      await apiFetch("/auth/profile", { method: "PATCH", body });
       toast.success(t("settings.profile.saved"));
       router.refresh();
     } catch (e) {
@@ -107,16 +119,18 @@ export function ProfileForm({ initial }: { initial: ProfileInitial }) {
             )}
           </div>
           <div className="space-y-1.5">
-            <div className="flex flex-wrap gap-2">
-              <Button size="sm" variant="secondary" loading={uploading} onClick={() => fileRef.current?.click()}>
-                {t("settings.profile.changePhoto")}
-              </Button>
-              {avatarId && (
-                <Button size="sm" variant="ghost" onClick={() => setAvatarId("")}>
-                  {t("settings.profile.removePhoto")}
+            {canChangeAvatar && (
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="secondary" loading={uploading} onClick={() => fileRef.current?.click()}>
+                  {t("settings.profile.changePhoto")}
                 </Button>
-              )}
-            </div>
+                {avatarId && (
+                  <Button size="sm" variant="ghost" onClick={() => setAvatarId("")}>
+                    {t("settings.profile.removePhoto")}
+                  </Button>
+                )}
+              </div>
+            )}
             <p className="text-xs text-muted">{t("settings.profile.avatarHint")}</p>
             <input
               ref={fileRef}
@@ -131,27 +145,27 @@ export function ProfileForm({ initial }: { initial: ProfileInitial }) {
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <Label htmlFor="name">{t("settings.profile.fullName")}</Label>
-            <Input id="name" value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Jane Doe" />
+            <Input id="name" value={displayName} disabled={!canUpdate} onChange={(e) => setDisplayName(e.target.value)} placeholder="Jane Doe" />
           </div>
           <div>
             <Label htmlFor="email">{t("settings.profile.email")}</Label>
-            <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="jane@example.com" />
+            <Input id="email" type="email" value={email} disabled={!canUpdate} onChange={(e) => setEmail(e.target.value)} placeholder="jane@example.com" />
           </div>
           <div>
             <Label htmlFor="jobTitle">{t("settings.profile.jobTitle")}</Label>
-            <Input id="jobTitle" value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} placeholder={t("settings.profile.jobTitlePlaceholder")} />
+            <Input id="jobTitle" value={jobTitle} disabled={!canUpdate} onChange={(e) => setJobTitle(e.target.value)} placeholder={t("settings.profile.jobTitlePlaceholder")} />
           </div>
           <div>
             <Label htmlFor="phone">{t("settings.profile.phone")}</Label>
-            <Input id="phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+90 555 000 0000" />
+            <Input id="phone" type="tel" value={phone} disabled={!canUpdate} onChange={(e) => setPhone(e.target.value)} placeholder="+90 555 000 0000" />
           </div>
           <div>
             <Label htmlFor="location">{t("settings.profile.location")}</Label>
-            <Input id="location" value={location} onChange={(e) => setLocation(e.target.value)} placeholder={t("settings.profile.locationPlaceholder")} />
+            <Input id="location" value={location} disabled={!canUpdate} onChange={(e) => setLocation(e.target.value)} placeholder={t("settings.profile.locationPlaceholder")} />
           </div>
           <div>
             <Label htmlFor="timezone">{t("settings.profile.timezone")}</Label>
-            <Select id="timezone" value={timezone} onChange={(e) => setTimezone(e.target.value)}>
+            <Select id="timezone" value={timezone} disabled={!canUpdate} onChange={(e) => setTimezone(e.target.value)}>
               {TIMEZONES.map((tz) => (
                 <option key={tz} value={tz}>
                   {tz}
@@ -161,15 +175,19 @@ export function ProfileForm({ initial }: { initial: ProfileInitial }) {
           </div>
           <div className="sm:col-span-2">
             <Label htmlFor="bio">{t("settings.profile.bio")}</Label>
-            <Textarea id="bio" rows={3} value={bio} onChange={(e) => setBio(e.target.value)} placeholder={t("settings.profile.bioPlaceholder")} />
+            <Textarea id="bio" rows={3} value={bio} disabled={!canUpdate} onChange={(e) => setBio(e.target.value)} placeholder={t("settings.profile.bioPlaceholder")} />
           </div>
         </div>
 
-        <div className="flex justify-end">
-          <Button variant="primary" loading={busy} onClick={save}>
-            {t("common.save")}
-          </Button>
-        </div>
+        {canUpdate || canChangeAvatar ? (
+          <div className="flex justify-end">
+            <Button variant="primary" loading={busy} onClick={save}>
+              {t("common.save")}
+            </Button>
+          </div>
+        ) : (
+          <p className="text-xs text-muted-2">{t("settings.readOnly")}</p>
+        )}
       </CardBody>
     </Card>
   );

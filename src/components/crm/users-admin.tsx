@@ -35,9 +35,29 @@ interface EditDraft {
   jobTitle: string;
 }
 
+/** What the signed-in position may do here — one flag per `settings.users` grant. */
+export interface UserAdminCaps {
+  create: boolean;
+  update: boolean;
+  password: boolean;
+  twoFactor: boolean;
+  activate: boolean;
+}
+const FULL_CAPS: UserAdminCaps = { create: true, update: true, password: true, twoFactor: true, activate: true };
+
 /** Admin screen: create/edit users, assign positions + managers, reset passwords
- *  and two-factor, enable/disable — all persisted to the DB. */
-export function UsersAdmin({ initial, positions }: { initial: UserRecord[]; positions: PositionOption[] }) {
+ *  and two-factor, enable/disable — all persisted to the DB. Every action is
+ *  gated by its own grant, so a position can e.g. view the list and toggle
+ *  accounts without being able to reset anyone's password. */
+export function UsersAdmin({
+  initial,
+  positions,
+  caps = FULL_CAPS,
+}: {
+  initial: UserRecord[];
+  positions: PositionOption[];
+  caps?: UserAdminCaps;
+}) {
   const { t } = useI18n();
   const [users, setUsers] = useState<UserRecord[]>(initial);
   const [query, setQuery] = useState("");
@@ -175,9 +195,11 @@ export function UsersAdmin({ initial, positions }: { initial: UserRecord[]; posi
           <h1 className="mt-0.5 text-lg font-semibold">{t("settings.users.title")}</h1>
           <p className="text-xs text-muted">{t("settings.users.subtitle")}</p>
         </div>
-        <Button variant="primary" size="sm" onClick={() => { setCreating((v) => !v); setEditing(null); }} disabled={pending}>
-          {t("settings.users.newUser")}
-        </Button>
+        {caps.create && (
+          <Button variant="primary" size="sm" onClick={() => { setCreating((v) => !v); setEditing(null); }} disabled={pending}>
+            {t("settings.users.newUser")}
+          </Button>
+        )}
       </div>
 
       {creating && (
@@ -267,14 +289,14 @@ export function UsersAdmin({ initial, positions }: { initial: UserRecord[]; posi
                 </td>
                 <td className="px-4 py-3 text-muted">{u.email}</td>
                 <td className="px-4 py-3">
-                  <Select value={u.positionId} onChange={(e) => patch(u.id, { positionId: e.target.value }, t("settings.users.positionUpdated"))} className="h-8 w-40">
+                  <Select value={u.positionId} disabled={!caps.update} onChange={(e) => patch(u.id, { positionId: e.target.value }, t("settings.users.positionUpdated"))} className="h-8 w-40">
                     {positions.map((p) => (
                       <option key={p.id} value={p.id}>{p.name}</option>
                     ))}
                   </Select>
                 </td>
                 <td className="px-4 py-3">
-                  <Select value={u.managerId} onChange={(e) => patch(u.id, { managerId: e.target.value || null }, t("settings.users.managerUpdated"))} className="h-8 w-40">
+                  <Select value={u.managerId} disabled={!caps.update} onChange={(e) => patch(u.id, { managerId: e.target.value || null }, t("settings.users.managerUpdated"))} className="h-8 w-40">
                     <option value="">{t("settings.users.noManager")}</option>
                     {users.filter((m) => m.id !== u.id).map((m) => (
                       <option key={m.id} value={m.id}>{m.displayName}</option>
@@ -293,16 +315,22 @@ export function UsersAdmin({ initial, positions }: { initial: UserRecord[]; posi
                 </td>
                 <td className="px-4 py-3 text-right">
                   <div className="flex flex-wrap justify-end gap-1.5">
-                    <Button variant="ghost" size="xs" onClick={() => { setEditing({ id: u.id, displayName: u.displayName, email: u.email, phone: u.phone, jobTitle: u.jobTitle }); setCreating(false); }}>
-                      {t("common.edit")}
-                    </Button>
-                    <Button variant="ghost" size="xs" onClick={() => patch(u.id, { active: !u.active }, u.active ? t("settings.users.disabled") : t("settings.users.enable"))}>
-                      {u.active ? t("settings.users.disable") : t("settings.users.enable")}
-                    </Button>
-                    <Button variant="ghost" size="xs" onClick={() => resetPassword(u)}>
-                      {t("settings.users.resetPassword")}
-                    </Button>
-                    {u.twoFactorEnabled && (
+                    {caps.update && (
+                      <Button variant="ghost" size="xs" onClick={() => { setEditing({ id: u.id, displayName: u.displayName, email: u.email, phone: u.phone, jobTitle: u.jobTitle }); setCreating(false); }}>
+                        {t("common.edit")}
+                      </Button>
+                    )}
+                    {caps.activate && (
+                      <Button variant="ghost" size="xs" onClick={() => patch(u.id, { active: !u.active }, u.active ? t("settings.users.disabled") : t("settings.users.enable"))}>
+                        {u.active ? t("settings.users.disable") : t("settings.users.enable")}
+                      </Button>
+                    )}
+                    {caps.password && (
+                      <Button variant="ghost" size="xs" onClick={() => resetPassword(u)}>
+                        {t("settings.users.resetPassword")}
+                      </Button>
+                    )}
+                    {caps.twoFactor && u.twoFactorEnabled && (
                       <Button variant="ghost" size="xs" onClick={() => reset2fa(u)}>
                         {t("settings.users.reset2fa")}
                       </Button>

@@ -63,12 +63,19 @@ export function MobileScreensAdmin({
   groupLabels = {},
   positions,
   users,
+  canCreate = true,
+  canUpdate = true,
+  canDelete = true,
 }: {
   initial: MobileConfigRow[];
   screens: MobileScreen[];
   groupLabels?: Record<string, string>;
   positions: NamedRef[];
   users: NamedRef[];
+  /** `settings.mobile:create` / `:update` / `:delete` from the permission matrix. */
+  canCreate?: boolean;
+  canUpdate?: boolean;
+  canDelete?: boolean;
 }) {
   const { t } = useI18n();
   const [rows, setRows] = useState<MobileConfigRow[]>(initial);
@@ -174,9 +181,11 @@ export function MobileScreensAdmin({
           <h1 className="text-lg font-semibold">{t("mobile.title")}</h1>
           <p className="text-xs text-muted">{t("mobile.subtitle")}</p>
         </div>
-        <Button variant="primary" size="sm" onClick={startNew} disabled={pending}>
-          {t("mobile.newRule")}
-        </Button>
+        {canCreate && (
+          <Button variant="primary" size="sm" onClick={startNew} disabled={pending}>
+            {t("mobile.newRule")}
+          </Button>
+        )}
       </div>
       <p className="text-xs text-muted-2">{t("mobile.precedenceHint")}</p>
 
@@ -301,12 +310,16 @@ export function MobileScreensAdmin({
                 <Badge tone="info">{r.clientId === "*" ? t("mobile.clientAll") : r.clientId}</Badge>
                 <span className="text-xs text-muted">{t("mobile.screensSelected", { n: String(r.screens.length) })}</span>
                 <div className="ml-auto flex gap-2">
-                  <Button size="xs" variant="ghost" onClick={() => startEdit(r)} disabled={pending}>
-                    {t("mobile.edit")}
-                  </Button>
-                  <Button size="xs" variant="ghost" onClick={() => remove(r)} disabled={pending}>
-                    {t("mobile.delete")}
-                  </Button>
+                  {canUpdate && (
+                    <Button size="xs" variant="ghost" onClick={() => startEdit(r)} disabled={pending}>
+                      {t("mobile.edit")}
+                    </Button>
+                  )}
+                  {canDelete && (
+                    <Button size="xs" variant="ghost" onClick={() => remove(r)} disabled={pending}>
+                      {t("mobile.delete")}
+                    </Button>
+                  )}
                 </div>
               </div>
             ))

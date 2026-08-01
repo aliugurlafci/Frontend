@@ -1,15 +1,22 @@
 import { serverApi } from "@/lib/http/server-api";
+import { getServerContext } from "@/lib/http/server-context";
+import { settingsAccess } from "@/lib/permissions/settings-access";
 import { metadata } from "@/lib/metadata";
 import { getLocale } from "@/lib/i18n/server";
 import { entityLabel } from "@/lib/i18n/labels";
 import { t } from "@/lib/i18n/messages";
 import { MobileScreensAdmin, type MobileScreen, type NamedRef } from "@/components/crm/mobile-screens-admin";
+import { SettingsDenied } from "@/components/crm/settings-denied";
 import { Card, CardBody } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 
 export const dynamic = "force-dynamic";
 
 export default async function MobileSettingsPage() {
+  const ctx = await getServerContext();
+  const access = settingsAccess(ctx);
+  if (!access.can("settings.mobile", "read")) return <SettingsDenied area="settings.mobile" />;
+
   try {
     const locale = await getLocale();
     const [catalog, configs, positionsPage, users] = await Promise.all([
@@ -38,7 +45,18 @@ export default async function MobileSettingsPage() {
       name: String(u.displayName ?? u.email ?? u.id),
     }));
 
-    return <MobileScreensAdmin initial={configs} screens={screens} groupLabels={groupLabels} positions={positions} users={userRefs} />;
+    return (
+      <MobileScreensAdmin
+        initial={configs}
+        screens={screens}
+        groupLabels={groupLabels}
+        positions={positions}
+        users={userRefs}
+        canCreate={access.can("settings.mobile", "create")}
+        canUpdate={access.can("settings.mobile", "update")}
+        canDelete={access.can("settings.mobile", "delete")}
+      />
+    );
   } catch {
     const locale = await getLocale();
     return (

@@ -84,15 +84,17 @@ function StatChip({ icon, label, value }: { icon: string; label: string; value: 
   );
 }
 
-/** Searchable, grouped explorer of the published entity model. */
+/** Searchable, grouped explorer of the published entity model.
+ *  `canPublish` is the `settings.metadata:publish` grant — re-publishing the
+ *  model is a separate privilege from reading it. */
 export function MetadataExplorer({
   version,
   entities,
-  isAdmin,
+  canPublish,
 }: {
   version: number;
   entities: EntitySummary[];
-  isAdmin: boolean;
+  canPublish: boolean;
 }) {
   const { t } = useI18n();
   const [q, setQ] = useState("");
@@ -123,7 +125,7 @@ export function MetadataExplorer({
 
   return (
     <Card>
-      <CardHeader title={t("settings.metadata")} action={isAdmin ? <RepublishButton /> : undefined} />
+      <CardHeader title={t("settings.metadata")} action={canPublish ? <RepublishButton /> : undefined} />
       <CardBody className="space-y-4">
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <StatChip icon="database" label={t("settings.publishedVersion")} value={`v${version}`} />

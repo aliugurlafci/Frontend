@@ -1,9 +1,12 @@
 import { serverApi } from "@/lib/http/server-api";
+import { getServerContext } from "@/lib/http/server-context";
+import { settingsAccess } from "@/lib/permissions/settings-access";
 import { metadata } from "@/lib/metadata";
 import { getLocale } from "@/lib/i18n/server";
 import { entityLabel } from "@/lib/i18n/labels";
 import { t } from "@/lib/i18n/messages";
 import { PositionsAdmin, type PositionRecord, type PermCatalog } from "@/components/crm/positions-admin";
+import { SettingsDenied } from "@/components/crm/settings-denied";
 import { Card, CardBody } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 
@@ -19,6 +22,10 @@ function parseJsonArray(v: unknown): string[] {
 }
 
 export default async function PositionsPage() {
+  const ctx = await getServerContext();
+  const access = settingsAccess(ctx);
+  if (!access.can("settings.roles", "read")) return <SettingsDenied area="settings.roles" />;
+
   try {
     const locale = await getLocale();
     const [page, screens, catalog] = await Promise.all([
@@ -42,15 +49,29 @@ export default async function PositionsPage() {
     for (const s of localizedScreens) groupLabels[s.group] ??= t(locale, `group.${s.group}`);
 
     // Localize the permission catalog's entity labels + group headers.
+    const localized = (key: string, fallback: string) => {
+      const value = t(locale, key);
+      return value === key ? fallback : value;
+    };
     const permCatalog: PermCatalog = {
       entities: catalog.entities.map((e) => {
         const entity = entityByName.get(e.name);
         return { name: e.name, group: e.group, actions: e.actions, label: entity ? entityLabel(entity, locale, { plural: true }) : e.name };
       }),
       special: catalog.special,
+      // Settings-screen areas (profile, users, mobile…) — the fine-grained layer
+      // on top of the coarse "settings" screen key.
+      settings: (catalog.settings ?? []).map((a) => ({
+        key: a.key,
+        group: a.group,
+        actions: a.actions,
+        selfService: a.selfService,
+        label: localized(`perm.area.${a.key}`, a.label),
+      })),
       rolePresets: Object.fromEntries(catalog.roles.map((r) => [r.value, r.grants])),
     };
     for (const e of permCatalog.entities) groupLabels[e.group] ??= t(locale, `group.${e.group}`);
+    for (const a of permCatalog.settings) groupLabels[a.group] ??= t(locale, `group.${a.group}`);
 
     const positions: PositionRecord[] = page.items.map((p) => ({
       id: p.id,
@@ -61,7 +82,16 @@ export default async function PositionsPage() {
       permissions: parseJsonArray(p.permissions),
       version: p.version,
     }));
-    return <PositionsAdmin initial={positions} screens={localizedScreens} groupLabels={groupLabels} catalog={permCatalog} />;
+    return (
+      <PositionsAdmin
+        initial={positions}
+        screens={localizedScreens}
+        groupLabels={groupLabels}
+        catalog={permCatalog}
+        canCreate={access.can("settings.roles", "create")}
+        canUpdate={access.can("settings.roles", "update")}
+      />
+    );
   } catch {
     const locale = await getLocale();
     return (

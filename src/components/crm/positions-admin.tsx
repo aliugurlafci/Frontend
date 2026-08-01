@@ -13,9 +13,19 @@ interface ScreenDef {
   label: string;
   group: string;
 }
+/** A grantable Settings-screen area (label localized server-side). */
+export interface SettingsAreaOption {
+  key: string;
+  label: string;
+  group: string;
+  actions: string[];
+  /** Personal area — every role holds it by default (rendered as a hint). */
+  selfService?: boolean;
+}
 export interface PermCatalog {
   entities: { name: string; label: string; group: string; actions: string[] }[];
   special: string[];
+  settings: SettingsAreaOption[];
   rolePresets: Record<string, string[]>;
 }
 export interface PositionRecord {
@@ -58,11 +68,17 @@ export function PositionsAdmin({
   screens,
   groupLabels = {},
   catalog,
+  canCreate = true,
+  canUpdate = true,
 }: {
   initial: PositionRecord[];
   screens: ScreenDef[];
   groupLabels?: Record<string, string>;
   catalog: PermCatalog;
+  /** `settings.roles:create` — may this position add new positions? */
+  canCreate?: boolean;
+  /** `settings.roles:update` — may it edit existing ones (else read-only)? */
+  canUpdate?: boolean;
 }) {
   const { t } = useI18n();
   const [positions, setPositions] = useState<PositionRecord[]>(initial);
@@ -89,6 +105,18 @@ export function PositionsAdmin({
     return [...byGroup.entries()];
   }, [catalog.entities]);
 
+  // The Settings screen's own areas (profile, users, mobile…), grouped the same
+  // way — personal areas first, then workspace, then administration.
+  const settingsGroups = useMemo(() => {
+    const byGroup = new Map<string, SettingsAreaOption[]>();
+    for (const a of catalog.settings ?? []) {
+      const arr = byGroup.get(a.group) ?? [];
+      arr.push(a);
+      byGroup.set(a.group, arr);
+    }
+    return [...byGroup.entries()];
+  }, [catalog.settings]);
+
   const grantSet = useMemo(() => new Set(editing?.permissions ?? []), [editing?.permissions]);
   const isAdminRole = editing?.role === "admin";
 
@@ -96,7 +124,14 @@ export function PositionsAdmin({
    *  the grants its base role inherits. Admin is a super-user (no listed grants). */
   function effectivePerms(p: { role: string; permissions: string[] }): string[] {
     if (p.role === "admin") return [];
-    return p.permissions.length ? [...p.permissions] : [...(catalog.rolePresets[p.role] ?? [])];
+    const perms = p.permissions.length ? [...p.permissions] : [...(catalog.rolePresets[p.role] ?? [])];
+    // A matrix saved before Settings permissions existed mentions no settings
+    // area at all — those positions keep the personal areas, so show them ticked
+    // (saving then makes them explicit instead of implied).
+    if (!perms.some((g) => g.startsWith("settings."))) {
+      perms.push(...(catalog.settings ?? []).filter((a) => a.selfService).map((a) => `${a.key}:*`));
+    }
+    return perms;
   }
 
   function fail(e: unknown) {
@@ -142,6 +177,26 @@ export function PositionsAdmin({
       return { ...d, permissions: [...set] };
     });
   }
+  /** Tick every Settings area (all of its operations). */
+  function grantAllSettings() {
+    setEditing((d) => {
+      if (!d) return d;
+      const set = new Set(d.permissions.filter((g) => !g.startsWith("settings.")));
+      for (const a of catalog.settings ?? []) set.add(`${a.key}:*`);
+      return { ...d, permissions: [...set] };
+    });
+  }
+  /** Drop every Settings-area grant from the draft. */
+  function clearSettings() {
+    setEditing((d) => (d ? { ...d, permissions: d.permissions.filter((g) => !g.startsWith("settings.")) } : d));
+  }
+  /** Localized operation label, falling back to the raw verb. */
+  function opLabel(op: string): string {
+    const key = `perm.op.${op}`;
+    const label = t(key);
+    return label === key ? op : label;
+  }
+
   /** Base the draft on an existing position: load only that position's permission
    *  details (and adopt its base-role category). The saved role stays standalone —
    *  its explicit permissions are authoritative, so it never inherits a base role. */
@@ -198,9 +253,11 @@ export function PositionsAdmin({
           <h1 className="text-lg font-semibold">{t("perm.title")}</h1>
           <p className="text-xs text-muted">{t("perm.subtitle")}</p>
         </div>
-        <Button variant="primary" size="sm" onClick={startNew} disabled={pending}>
-          {t("perm.newPosition")}
-        </Button>
+        {canCreate && (
+          <Button variant="primary" size="sm" onClick={startNew} disabled={pending}>
+            {t("perm.newPosition")}
+          </Button>
+        )}
       </div>
 
       {editing && (
@@ -344,7 +401,7 @@ export function PositionsAdmin({
                                                 disabled={star}
                                                 onChange={() => toggleGrant(`${e.name}:${a}`)}
                                               />
-                                              <span>{t(`perm.op.${a}`) === `perm.op.${a}` ? a : t(`perm.op.${a}`)}</span>
+                                              <span>{opLabel(a)}</span>
                                             </label>
                                           ))
                                         )}
@@ -362,6 +419,90 @@ export function PositionsAdmin({
                 </>
               )}
             </div>
+
+            {/* ---- Settings screen permissions ----
+                The Settings screen, area by area: which sections this position may
+                open and exactly what it may do inside each one. */}
+            {!isAdminRole && settingsGroups.length > 0 && (
+              <div className="space-y-3 border-t border-border pt-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-sm font-medium">{t("perm.settingsAreas")}</span>
+                  <div className="flex gap-2">
+                    <Button size="xs" variant="ghost" onClick={grantAllSettings}>
+                      {t("perm.selectAll")}
+                    </Button>
+                    <Button size="xs" variant="ghost" onClick={clearSettings}>
+                      {t("perm.clear")}
+                    </Button>
+                  </div>
+                </div>
+                <p className="text-xs text-muted">{t("perm.settingsHint")}</p>
+
+                <div className="space-y-3">
+                  {settingsGroups.map(([group, list]) => (
+                    <div key={group}>
+                      <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-2">
+                        {groupLabels[group] ?? group}
+                      </p>
+                      <div className="overflow-hidden rounded-md border border-border">
+                        <table className="w-full text-xs">
+                          <thead className="bg-background text-muted-2">
+                            <tr>
+                              <th className="px-2 py-1.5 text-left font-medium">{t("perm.colArea")}</th>
+                              <th className="px-1 py-1.5 text-center font-medium" title={t("perm.areaAllHint")}>
+                                {t("perm.colAll")}
+                              </th>
+                              <th className="px-2 py-1.5 text-left font-medium">{t("perm.colOperations")}</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border">
+                            {list.map((a) => {
+                              const star = grantSet.has(`${a.key}:*`);
+                              return (
+                                <tr key={a.key} className="hover:bg-surface-2">
+                                  <td className="px-2 py-1.5">
+                                    <span className="font-medium text-foreground">{a.label}</span>
+                                    {a.selfService && (
+                                      <span className="ml-1.5 text-[10px] uppercase tracking-wide text-muted-2">
+                                        {t("perm.selfService")}
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="px-1 py-1.5 text-center">
+                                    <input
+                                      type="checkbox"
+                                      className="h-3.5 w-3.5 accent-primary"
+                                      checked={star}
+                                      onChange={() => toggleEntityAll(a.key)}
+                                    />
+                                  </td>
+                                  <td className="px-2 py-1.5">
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {a.actions.map((op) => (
+                                        <label key={op} className="flex items-center gap-1 rounded border border-border px-1.5 py-0.5">
+                                          <input
+                                            type="checkbox"
+                                            className="h-3 w-3 accent-primary disabled:opacity-40"
+                                            checked={isGranted(grantSet, `${a.key}:${op}`)}
+                                            disabled={star}
+                                            onChange={() => toggleGrant(`${a.key}:${op}`)}
+                                          />
+                                          <span>{opLabel(op)}</span>
+                                        </label>
+                                      ))}
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="flex justify-end gap-2">
               <Button variant="secondary" size="sm" onClick={() => setEditing(null)} disabled={pending}>
@@ -401,9 +542,13 @@ export function PositionsAdmin({
                       : t("perm.rolePerms")}
                 </td>
                 <td className="px-4 py-3 text-right">
-                  <Button variant="ghost" size="xs" onClick={() => startEdit(p)}>
-                    {t("perm.editBtn")}
-                  </Button>
+                  {canUpdate ? (
+                    <Button variant="ghost" size="xs" onClick={() => startEdit(p)}>
+                      {t("perm.editBtn")}
+                    </Button>
+                  ) : (
+                    <span className="text-xs text-muted-2">{t("perm.readOnly")}</span>
+                  )}
                 </td>
               </tr>
             ))}

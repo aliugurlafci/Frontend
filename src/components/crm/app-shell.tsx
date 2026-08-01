@@ -3,6 +3,7 @@ import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { metadata } from "@/lib/metadata";
 import { screenKeyForPath, screenCatalog } from "@/lib/config/screens";
+import { canAnySettings, SETTINGS_AREAS } from "@/lib/config/settings-permissions";
 import { serverApi } from "@/lib/http/server-api";
 import { getLocale } from "@/lib/i18n/server";
 import { entityLabel } from "@/lib/i18n/labels";
@@ -94,6 +95,11 @@ export async function AppShell({ children }: { children: ReactNode }) {
   const currentScreen = screenKeyForPath(pathname);
   const denied = !allowed.has(currentScreen);
 
+  // Settings is additionally area-gated: the link only shows when the position
+  // holds at least one area of the Settings screen.
+  const grants = me.grants?.length ? me.grants : [];
+  const hasSettingsArea = isAdmin || SETTINGS_AREAS.some((a) => canAnySettings(grants, a.key));
+
   const avatarUrl = me.avatarId ? `/api/v1/files/${encodeURIComponent(me.avatarId)}/download?inline=1` : undefined;
 
   return (
@@ -102,7 +108,7 @@ export async function AppShell({ children }: { children: ReactNode }) {
       displayName={me.displayName}
       avatarUrl={avatarUrl}
       initialCollapsed={collapsed}
-      canSettings={allowed.has("settings")}
+      canSettings={allowed.has("settings") && hasSettingsArea}
     >
       {denied ? <AccessDenied screen={currentScreen} /> : children}
     </ShellClient>

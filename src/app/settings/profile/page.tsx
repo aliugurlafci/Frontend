@@ -1,11 +1,18 @@
 import Link from "next/link";
 import { serverApi } from "@/lib/http/server-api";
+import { getServerContext } from "@/lib/http/server-context";
+import { settingsAccess } from "@/lib/permissions/settings-access";
 import { getT } from "@/lib/i18n/server";
 import { ProfileForm } from "@/components/crm/settings-profile-form";
+import { SettingsDenied } from "@/components/crm/settings-denied";
 
 export const dynamic = "force-dynamic";
 
 export default async function ProfileSettingsPage() {
+  const ctx = await getServerContext();
+  const access = settingsAccess(ctx);
+  if (!access.can("settings.profile", "read")) return <SettingsDenied area="settings.profile" />;
+
   const me = await serverApi.me();
   const t = await getT();
   return (
@@ -20,6 +27,8 @@ export default async function ProfileSettingsPage() {
         </Link>
       </div>
       <ProfileForm
+        canUpdate={access.can("settings.profile", "update")}
+        canChangeAvatar={access.can("settings.profile", "avatar")}
         initial={{
           displayName: me.displayName,
           email: me.email,

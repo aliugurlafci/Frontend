@@ -16,6 +16,7 @@ import { backendApiBase } from "@/lib/config/backend";
 import type { AggregateQuery, AggregateRow, Page, Query } from "@/lib/data/query";
 import type { EntityRecord } from "@/lib/metadata/types";
 import type { AuditEntry } from "@/lib/domain/audit";
+import type { SettingsAreaDef } from "@/lib/config/settings-permissions";
 
 /** Request headers forwarded to the backend so it sees the same caller. */
 const FORWARDED_HEADERS = [
@@ -258,6 +259,8 @@ export interface PermissionCatalog {
   entities: { name: string; group: string; actions: string[] }[];
   special: string[];
   roles: { value: string; grants: string[] }[];
+  /** The Settings screen, area by area (see lib/config/settings-permissions). */
+  settings: SettingsAreaDef[];
 }
 
 export interface ScreenDef {

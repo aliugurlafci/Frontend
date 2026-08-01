@@ -25,7 +25,9 @@ const optionBtn = (active: boolean) =>
   cn("flex items-center gap-2 rounded-lg border p-3 text-left hover:bg-surface-2", active ? "border-primary ring-1 ring-primary" : "border-border");
 const dot = (active: boolean) => cn("h-3.5 w-3.5 rounded-full border", active ? "border-primary bg-primary" : "border-border");
 
-export function AppearanceForm() {
+/** `canUpdate` is the `settings.appearance:update` grant — without it the options
+ *  render read-only (the backend rejects the write either way). */
+export function AppearanceForm({ canUpdate = true }: { canUpdate?: boolean }) {
   const { settings, setSetting, theme, setTheme } = useSettings();
   const { t } = useI18n();
   const accent = settings.accent ?? "";
@@ -35,7 +37,8 @@ export function AppearanceForm() {
 
   return (
     <div className="space-y-4">
-      <p className="text-xs text-muted">{t("settings.appearance.applyHint")}</p>
+      <p className="text-xs text-muted">{canUpdate ? t("settings.appearance.applyHint") : t("settings.readOnly")}</p>
+      <div className={cn("space-y-4", !canUpdate && "pointer-events-none opacity-60")}>
 
       <Card>
         <CardHeader title={t("settings.appearance.theme")} />
@@ -129,6 +132,7 @@ export function AppearanceForm() {
           </button>
         </CardBody>
       </Card>
+      </div>
     </div>
   );
 }
