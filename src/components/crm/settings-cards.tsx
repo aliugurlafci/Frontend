@@ -85,8 +85,8 @@ function StatChip({ icon, label, value }: { icon: string; label: string; value: 
 }
 
 /** Searchable, grouped explorer of the published entity model.
- *  `canPublish` is the `settings.metadata:publish` grant — re-publishing the
- *  model is a separate privilege from reading it. */
+ *  The card and `canPublish` are administrator-only: the data model is
+ *  infrastructure, not tenant configuration, so it has no permission area. */
 export function MetadataExplorer({
   version,
   entities,

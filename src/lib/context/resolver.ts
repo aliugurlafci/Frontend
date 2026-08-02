@@ -2,43 +2,22 @@
  * Phase 4 — Context resolver (auth + locale + feature flags).
  *
  * Builds an immutable RequestContext from request headers. Authentication is
- * pluggable: the default dev authenticator maps an `x-actor` header to a demo
- * principal, and Phase 13 swaps in a JWT/OIDC authenticator via
- * `setAuthenticator` without the rest of the stack changing.
+ * pluggable via `setAuthenticator`; nothing authenticates until one is
+ * installed. Server components get the signed-in principal from the backend
+ * instead (see lib/http/server-context).
  */
 import { systemClock } from "@/lib/core/clock";
 import { newCorrelationId } from "@/lib/core/ids";
 import { UnauthenticatedError } from "@/lib/enforcement/errors";
 import { configStore } from "./config";
-import { DEMO_ORG, DEMO_TENANT, DEMO_USERS, OTHER_ORG, OTHER_TENANT, OTHER_USER } from "./dev";
 import type { Principal, RequestContext, TenantScope } from "./types";
 
 export type AuthenticatedPrincipal = Principal & TenantScope;
 
 export type Authenticator = (headers: Headers) => AuthenticatedPrincipal | null;
 
-function readCookie(headers: Headers, name: string): string | null {
-  const cookie = headers.get("cookie");
-  if (!cookie) return null;
-  for (const part of cookie.split(";")) {
-    const [k, ...v] = part.trim().split("=");
-    if (k === name) return decodeURIComponent(v.join("="));
-  }
-  return null;
-}
-
-/** Dev authenticator: pick a seeded principal via header or `aula_actor` cookie. */
-export const devAuthenticator: Authenticator = (headers) => {
-  // Allow tests to target the other tenant.
-  if (headers.get("x-tenant") === OTHER_TENANT) {
-    return { ...OTHER_USER, tenantId: OTHER_TENANT, orgId: OTHER_ORG };
-  }
-  const actor = headers.get("x-actor") ?? readCookie(headers, "aula_actor") ?? "admin";
-  const principal = DEMO_USERS[actor] ?? DEMO_USERS.admin;
-  return { ...principal, tenantId: DEMO_TENANT, orgId: DEMO_ORG };
-};
-
-let authenticator: Authenticator = devAuthenticator;
+/** No principal until an authenticator is installed. */
+let authenticator: Authenticator = () => null;
 
 export function setAuthenticator(fn: Authenticator): void {
   authenticator = fn;

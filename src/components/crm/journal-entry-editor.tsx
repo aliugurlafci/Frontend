@@ -12,6 +12,7 @@ import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input, Label, Select } from "@/components/ui/input";
 import { Icon } from "@/components/ui/icon";
+import { useT } from "@/lib/i18n/client";
 
 interface JLine {
   ledgerAccountId: string | null;
@@ -34,6 +35,7 @@ export function JournalEntryEditor({
   branches: EntityRecord[];
 }) {
   const router = useRouter();
+  const t = useT();
   const isNew = id === "new";
   const [doc, setDoc] = useState<EntityRecord | null>(null);
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
@@ -81,12 +83,12 @@ export function JournalEntryEditor({
 
   async function save(post: boolean) {
     if (!date) {
-      toast.error("Date is required");
+      toast.error(t("je.errDate"));
       return;
     }
     const valid = lines.filter((l) => l.ledgerAccountId && (l.debit > 0 || l.credit > 0));
     if (valid.length < 2 || !totals.balanced) {
-      toast.error("Entry must balance (debit = credit) with at least two lines");
+      toast.error(t("je.errBalance"));
       return;
     }
     setBusy(true);
@@ -114,7 +116,7 @@ export function JournalEntryEditor({
     setBusy(true);
     try {
       await apiFetch(`/journal-entries/${id}/${action}`, { method: "POST" });
-      toast.success(action);
+      toast.success(t(action === "post" ? "je.posted" : "je.voided"));
       await load();
     } catch (e) {
       toast.error((e as Error).message);
@@ -128,31 +130,31 @@ export function JournalEntryEditor({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-3">
           <Link href="/journalEntry" className="text-sm text-muted hover:text-foreground">
-            <Icon name="chevronLeft" className="inline h-4 w-4" /> Journal Entries
+            <Icon name="chevronLeft" className="inline h-4 w-4" /> {t("je.listTitle")}
           </Link>
-          <h1 className="text-lg font-semibold">{isNew ? "New Journal Entry" : String(doc?.number ?? "JE")}</h1>
+          <h1 className="text-lg font-semibold">{isNew ? t("je.new") : String(doc?.number ?? "JE")}</h1>
           {doc && <Badge tone={doc.status === "posted" ? "success" : doc.status === "void" ? "danger" : "neutral"}>{String(doc.status)}</Badge>}
         </div>
         <div className="flex items-center gap-2">
           {isNew ? (
             <>
               <Button size="sm" loading={busy} onClick={() => save(false)}>
-                Save draft
+                {t("je.saveDraft")}
               </Button>
               <Button variant="primary" size="sm" loading={busy} disabled={!totals.balanced} onClick={() => save(true)}>
-                Save & post
+                {t("je.saveAndPost")}
               </Button>
             </>
           ) : (
             <>
               {doc?.status === "draft" && (
                 <Button variant="primary" size="sm" loading={busy} onClick={() => runAction("post")}>
-                  Post
+                  {t("je.post")}
                 </Button>
               )}
               {doc?.status !== "void" && (
                 <Button size="sm" loading={busy} onClick={() => runAction("void")}>
-                  Void
+                  {t("je.void")}
                 </Button>
               )}
             </>
@@ -161,22 +163,22 @@ export function JournalEntryEditor({
       </div>
 
       <Card>
-        <CardHeader title="Details" />
+        <CardHeader title={t("doc.details")} />
         <CardBody className="grid gap-3 sm:grid-cols-3">
           <div>
             <Label htmlFor="date" required>
-              Date
+              {t("je.date")}
             </Label>
             <Input id="date" type="date" value={date} disabled={readOnly} onChange={(e) => setDate(e.target.value)} />
           </div>
           <div className="sm:col-span-2">
-            <Label htmlFor="memo">Memo</Label>
+            <Label htmlFor="memo">{t("je.memo")}</Label>
             <Input id="memo" value={memo} disabled={readOnly} onChange={(e) => setMemo(e.target.value)} />
           </div>
           <div>
-            <Label htmlFor="branch">Branch</Label>
+            <Label htmlFor="branch">{t("je.branch")}</Label>
             <Select id="branch" value={branchId} disabled={readOnly} onChange={(e) => setBranchId(e.target.value)}>
-              <option value="">— None —</option>
+              <option value="">{t("common.none")}</option>
               {branches.map((b) => (
                 <option key={b.id} value={b.id}>
                   {String(b.name)}
@@ -188,15 +190,15 @@ export function JournalEntryEditor({
       </Card>
 
       <Card>
-        <CardHeader title="Lines" />
+        <CardHeader title={t("je.lines")} />
         <CardBody>
           <table className="w-full text-sm">
             <thead className="border-b border-border text-left text-xs uppercase text-muted">
               <tr>
-                <th className="py-2">Account</th>
-                <th className="py-2">Description</th>
-                <th className="w-28 py-2 text-right">Debit</th>
-                <th className="w-28 py-2 text-right">Credit</th>
+                <th className="py-2">{t("je.account")}</th>
+                <th className="py-2">{t("lines.description")}</th>
+                <th className="w-28 py-2 text-right">{t("je.debit")}</th>
+                <th className="w-28 py-2 text-right">{t("je.credit")}</th>
                 {!readOnly && <th className="w-8" />}
               </tr>
             </thead>
@@ -208,7 +210,7 @@ export function JournalEntryEditor({
                       accName(String(l.ledgerAccountId))
                     ) : (
                       <Select value={l.ledgerAccountId ?? ""} onChange={(e) => updateLine(i, { ledgerAccountId: e.target.value || null })} className="h-8 text-xs">
-                        <option value="">— Select —</option>
+                        <option value="">{t("doc.select")}</option>
                         {accounts.map((a) => (
                           <option key={a.id} value={a.id}>
                             {String(a.code)} · {String(a.name)}
@@ -228,7 +230,7 @@ export function JournalEntryEditor({
                   </td>
                   {!readOnly && (
                     <td className="py-1.5">
-                      <button onClick={() => setLines((ls) => ls.filter((_, idx) => idx !== i))} className="text-muted hover:text-danger" aria-label="Remove">
+                      <button onClick={() => setLines((ls) => ls.filter((_, idx) => idx !== i))} className="text-muted hover:text-danger" aria-label={t("lines.remove")}>
                         <Icon name="trash" className="h-3.5 w-3.5" />
                       </button>
                     </td>
@@ -239,7 +241,7 @@ export function JournalEntryEditor({
             <tfoot className="border-t border-border">
               <tr className={totals.balanced ? "" : "text-danger"}>
                 <td colSpan={2} className="py-2 text-right text-xs text-muted">
-                  Totals {totals.balanced ? "(balanced)" : "(must balance)"}
+                  {t("je.totals")} {totals.balanced ? t("je.balanced") : t("je.mustBalance")}
                 </td>
                 <td className="py-2 text-right font-semibold tabular-nums">{formatMoney(totals.debit, "USD")}</td>
                 <td className="py-2 text-right font-semibold tabular-nums">{formatMoney(totals.credit, "USD")}</td>
@@ -249,7 +251,7 @@ export function JournalEntryEditor({
           </table>
           {!readOnly && (
             <Button size="sm" className="mt-2" onClick={() => setLines((ls) => [...ls, emptyLine()])}>
-              <Icon name="plus" className="h-3.5 w-3.5" /> Add line
+              <Icon name="plus" className="h-3.5 w-3.5" /> {t("lines.add")}
             </Button>
           )}
         </CardBody>

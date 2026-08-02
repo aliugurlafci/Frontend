@@ -137,6 +137,8 @@ export interface MeResult {
   featureFlags: Record<string, boolean>;
   positionId: string | null;
   position: { id: string; name: string; role: string } | null;
+  /** The company this user belongs to (Settings → Account card). */
+  companyId: string | null;
   screens: string[];
   /** Effective operation grants (matrix-authoritative, else role defaults). */
   grants: string[];
@@ -212,6 +214,12 @@ export const serverApi = {
   /** The full screen catalog (for the admin position editor). */
   screens: async (): Promise<ScreenDef[]> => {
     const { screens } = await request<{ screens: ScreenDef[] }>(`/screens`);
+    return screens;
+  },
+
+  /** The screens the caller may grant on — their own access (all, for an admin). */
+  grantableScreens: async (): Promise<ScreenDef[]> => {
+    const { screens } = await request<{ screens: ScreenDef[] }>(`/screens/grantable`);
     return screens;
   },
 

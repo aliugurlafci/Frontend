@@ -14,7 +14,7 @@ import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import { Icon } from "@/components/ui/icon";
 import { LineItemsEditor, type EditableLine } from "./line-items-editor";
 import { enumTone } from "./field-format";
-import { useT } from "@/lib/i18n/client";
+import { useI18n } from "@/lib/i18n/context";
 
 interface DocResult {
   doc: EntityRecord;
@@ -27,15 +27,10 @@ interface TransitionOption {
   to: string;
 }
 
-const DATE_FIELDS: Record<"po" | "bill", { name: string; label: string }[]> = {
-  po: [
-    { name: "orderDate", label: "Order Date" },
-    { name: "expectedDate", label: "Expected Date" },
-  ],
-  bill: [
-    { name: "billDate", label: "Bill Date" },
-    { name: "dueDate", label: "Due Date" },
-  ],
+/** Header date fields per document kind; labels come from the metadata. */
+const DATE_FIELDS: Record<"po" | "bill", string[]> = {
+  po: ["orderDate", "expectedDate"],
+  bill: ["billDate", "dueDate"],
 };
 
 /** Supplier-side document editor shared by purchase orders and vendor bills.
@@ -63,11 +58,16 @@ export function PurchaseDocEditor({
   me?: { userId: string; roles: string[] };
 }) {
   const router = useRouter();
-  const t = useT();
+  const { t, fieldLabel } = useI18n();
   const isNew = id === "new";
   const statusField = entity.fields.find((f) => f.name === "status")!;
   const currencyField = entity.fields.find((f) => f.name === "currencyCode")!;
   const dateFields = DATE_FIELDS[mode];
+  /** Localized label for one of this document's own fields. */
+  const fl = (name: string) => {
+    const field = entity.fields.find((f) => f.name === name);
+    return field ? fieldLabel(field, entity.name) : name;
+  };
 
   const [doc, setDoc] = useState<EntityRecord | null>(null);
   const [header, setHeader] = useState<Record<string, unknown>>({ currencyCode: "USD" });
@@ -120,17 +120,17 @@ export function PurchaseDocEditor({
     };
     if (mode === "po") out.warehouseId = header.warehouseId ?? null;
     if (mode === "bill") out.goodsReceiptId = header.goodsReceiptId ?? null;
-    for (const d of dateFields) out[d.name] = header[d.name] ?? null;
+    for (const name of dateFields) out[name] = header[name] ?? null;
     return out;
   }
 
   async function save() {
     if (!header.supplierId) {
-      toast.error("Please choose a supplier");
+      toast.error(t("doc.errSupplier"));
       return;
     }
     if (mode === "po" && !header.warehouseId) {
-      toast.error("Please choose a warehouse");
+      toast.error(t("doc.errWarehouse"));
       return;
     }
     setBusy(true);
@@ -204,7 +204,7 @@ export function PurchaseDocEditor({
   async function addPayment() {
     const amount = Number(payAmount);
     if (!amount || amount <= 0) {
-      toast.error("Enter a positive amount");
+      toast.error(t("doc.errAmount"));
       return;
     }
     setBusy(true);
@@ -214,7 +214,7 @@ export function PurchaseDocEditor({
         body: { amount, method: payMethod, paidAt: new Date().toISOString().slice(0, 10) },
       });
       setPayAmount("");
-      toast.success("Payment recorded");
+      toast.success(t("doc.paymentRecorded"));
       await load();
     } catch (e) {
       toast.error((e as Error).message);
@@ -300,14 +300,14 @@ export function PurchaseDocEditor({
       )}
 
       <Card>
-        <CardHeader title="Details" />
+        <CardHeader title={t("doc.details")} />
         <CardBody className="grid gap-3 sm:grid-cols-2">
           <div>
             <Label htmlFor="supplier" required>
-              Supplier
+              {fl("supplierId")}
             </Label>
             <Select id="supplier" value={String(header.supplierId ?? "")} disabled={poLocked} onChange={(e) => setField("supplierId", e.target.value || null)}>
-              <option value="">— Select —</option>
+              <option value="">{t("doc.select")}</option>
               {suppliers.map((s) => (
                 <option key={s.id} value={s.id}>
                   {String(s.name)}
@@ -319,10 +319,10 @@ export function PurchaseDocEditor({
           {mode === "po" && (
             <div>
               <Label htmlFor="warehouse" required>
-                Warehouse
+                {fl("warehouseId")}
               </Label>
               <Select id="warehouse" value={String(header.warehouseId ?? "")} disabled={poLocked} onChange={(e) => setField("warehouseId", e.target.value || null)}>
-                <option value="">— Select —</option>
+                <option value="">{t("doc.select")}</option>
                 {warehouses.map((w) => (
                   <option key={w.id} value={w.id}>
                     {String(w.name)}
@@ -334,9 +334,9 @@ export function PurchaseDocEditor({
 
           {mode === "bill" && (
             <div>
-              <Label htmlFor="grn">Goods Receipt (optional)</Label>
+              <Label htmlFor="grn">{fl("goodsReceiptId")}</Label>
               <Select id="grn" value={String(header.goodsReceiptId ?? "")} onChange={(e) => setField("goodsReceiptId", e.target.value || null)}>
-                <option value="">— None —</option>
+                <option value="">{t("common.none")}</option>
                 {goodsReceipts.map((g) => (
                   <option key={g.id} value={g.id}>
                     {String(g.number)}
@@ -347,7 +347,7 @@ export function PurchaseDocEditor({
           )}
 
           <div>
-            <Label htmlFor="currency">Currency</Label>
+            <Label htmlFor="currency">{fl("currencyCode")}</Label>
             <Select id="currency" value={currency} disabled={poLocked} onChange={(e) => setField("currencyCode", e.target.value)}>
               {currencyField.options?.map((o) => (
                 <option key={o.value} value={o.value}>
@@ -356,21 +356,21 @@ export function PurchaseDocEditor({
               ))}
             </Select>
           </div>
-          {dateFields.map((d) => (
-            <div key={d.name}>
-              <Label htmlFor={d.name}>{d.label}</Label>
-              <Input id={d.name} type="date" value={String(header[d.name] ?? "")} disabled={poLocked} onChange={(e) => setField(d.name, e.target.value || null)} />
+          {dateFields.map((name) => (
+            <div key={name}>
+              <Label htmlFor={name}>{fl(name)}</Label>
+              <Input id={name} type="date" value={String(header[name] ?? "")} disabled={poLocked} onChange={(e) => setField(name, e.target.value || null)} />
             </div>
           ))}
           <div className="sm:col-span-2">
-            <Label htmlFor="notes">Notes</Label>
+            <Label htmlFor="notes">{fl("notes")}</Label>
             <Textarea id="notes" value={String(header.notes ?? "")} disabled={poLocked} onChange={(e) => setField("notes", e.target.value)} />
           </div>
         </CardBody>
       </Card>
 
       <Card>
-        <CardHeader title="Line items" />
+        <CardHeader title={t("doc.lineItems")} />
         <CardBody>
           <LineItemsEditor lines={lines} products={products} currencyCode={currency} priceSource="costPrice" readOnly={poLocked} onChange={setLines} />
         </CardBody>
@@ -378,7 +378,7 @@ export function PurchaseDocEditor({
 
       {mode === "bill" && !isNew && doc && (
         <Card>
-          <CardHeader title="Payments" />
+          <CardHeader title={t("doc.payments")} />
           <CardBody className="space-y-3">
             {payments.length > 0 && (
               <table className="w-full text-sm">
@@ -396,23 +396,23 @@ export function PurchaseDocEditor({
             )}
             <div className="flex items-end gap-2">
               <div>
-                <Label htmlFor="pa">Amount</Label>
+                <Label htmlFor="pa">{t("doc.amount")}</Label>
                 <Input id="pa" type="number" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} className="w-32" />
               </div>
               <div>
-                <Label htmlFor="pm">Method</Label>
+                <Label htmlFor="pm">{t("doc.method")}</Label>
                 <Select id="pm" value={payMethod} onChange={(e) => setPayMethod(e.target.value)} className="w-32">
-                  <option value="bank">Bank</option>
-                  <option value="card">Card</option>
-                  <option value="cash">Cash</option>
-                  <option value="other">Other</option>
+                  <option value="bank">{t("doc.method.bank")}</option>
+                  <option value="card">{t("doc.method.card")}</option>
+                  <option value="cash">{t("doc.method.cash")}</option>
+                  <option value="other">{t("doc.method.other")}</option>
                 </Select>
               </div>
               <Button size="sm" onClick={addPayment} disabled={busy}>
-                Record payment
+                {t("doc.recordPayment")}
               </Button>
               <div className="ml-auto text-right text-sm">
-                <div className="text-muted">Balance</div>
+                <div className="text-muted">{t("doc.balance")}</div>
                 <div className="font-semibold tabular-nums">{formatMoney(Number(doc.balance ?? 0), currency)}</div>
               </div>
             </div>
@@ -422,7 +422,7 @@ export function PurchaseDocEditor({
 
       {!isNew && doc && (
         <p className="text-right text-sm font-semibold">
-          Total: {formatMoney(typeof doc.total === "number" ? doc.total : 0, currency)}
+          {t("doc.total")}: {formatMoney(typeof doc.total === "number" ? doc.total : 0, currency)}
         </p>
       )}
     </div>

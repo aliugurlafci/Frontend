@@ -28,9 +28,12 @@ export default async function PositionsPage() {
 
   try {
     const locale = await getLocale();
+    // `grantableScreens` is the caller's own screen access — a non-admin can
+    // only hand out screens they can open themselves (the catalog is narrowed
+    // the same way server-side).
     const [page, screens, catalog] = await Promise.all([
       serverApi.list("position", { pageSize: 100 }),
-      serverApi.screens(),
+      serverApi.grantableScreens(),
       serverApi.permissionsCatalog(),
     ]);
 

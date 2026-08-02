@@ -5,7 +5,7 @@ import { metadata } from "@/lib/metadata";
 import { permissionEngine } from "@/lib/permissions/engine";
 import { formatMoney } from "@/lib/finance/money";
 import { getLocale } from "@/lib/i18n/server";
-import { entityLabel } from "@/lib/i18n/labels";
+import { entityLabel, enumLabel, fieldLabel } from "@/lib/i18n/labels";
 import { t } from "@/lib/i18n/messages";
 import { Badge } from "@/components/ui/badge";
 import { enumTone } from "@/components/crm/field-format";
@@ -20,6 +20,7 @@ export default async function VendorBillListPage() {
   const entity = metadata.getEntity("vendorBill");
   const statusField = entity.fields.find((f) => f.name === "status")!;
   const canCreate = permissionEngine.can(ctx, { action: "vendorBill:create", entity: "vendorBill" });
+  const fl = (name: string) => fieldLabel(entity.fields.find((f) => f.name === name)!, locale, "vendorBill");
 
   let rows: EntityRecord[] = [];
   const supplierName = new Map<string, string>();
@@ -42,15 +43,15 @@ export default async function VendorBillListPage() {
       newLabel={`${t(locale, "common.new")} ${entityLabel(entity, locale)}`}
       canCreate={canCreate}
       icon="receipt"
-      emptyTitle="No vendor bills yet"
-      emptyDesc="Record a supplier bill (accounts payable)."
+      emptyTitle={t(locale, "doc.empty.vendorBill")}
+      emptyDesc={t(locale, "doc.empty.vendorBill.desc")}
       rows={rows}
       columns={[
-        { header: "Number", cell: (r) => <Link href={`/vendorBill/${r.id}`} className="font-medium text-primary hover:underline">{String(r.number ?? "—")}</Link> },
-        { header: "Supplier", cell: (r) => supplierName.get(String(r.supplierId)) ?? "—" },
-        { header: "Status", cell: (r) => <Badge tone={enumTone(statusField, r.status)}>{String(r.status)}</Badge> },
-        { header: "Total", cell: (r) => formatMoney(typeof r.total === "number" ? r.total : 0, String(r.currencyCode ?? "USD")) },
-        { header: "Balance", cell: (r) => formatMoney(typeof r.balance === "number" ? r.balance : 0, String(r.currencyCode ?? "USD")) },
+        { header: fl("number"), cell: (r) => <Link href={`/vendorBill/${r.id}`} className="font-medium text-primary hover:underline">{String(r.number ?? "—")}</Link> },
+        { header: fl("supplierId"), cell: (r) => supplierName.get(String(r.supplierId)) ?? "—" },
+        { header: fl("status"), cell: (r) => <Badge tone={enumTone(statusField, r.status)}>{enumLabel(statusField, String(r.status ?? ""), locale)}</Badge> },
+        { header: fl("total"), cell: (r) => formatMoney(typeof r.total === "number" ? r.total : 0, String(r.currencyCode ?? "USD")) },
+        { header: fl("balance"), cell: (r) => formatMoney(typeof r.balance === "number" ? r.balance : 0, String(r.currencyCode ?? "USD")) },
       ]}
     />
   );

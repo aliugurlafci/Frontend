@@ -7,22 +7,14 @@ import { apiFetch, ApiRequestError } from "@/lib/api-client";
 import { useI18n } from "@/lib/i18n/context";
 import { AuthLayout, AUTH_FIELD, AUTH_BUTTON } from "@/components/ui/auth-layout";
 
-const DEMO_ACCOUNTS = [
-  { email: "avery@acme.test", name: "Avery Admin", role: "Administrator" },
-  { email: "morgan@acme.test", name: "Morgan Manager", role: "Sales Manager" },
-  { email: "riley@acme.test", name: "Riley Rep", role: "Sales Rep" },
-  { email: "casey@acme.test", name: "Casey Accountant", role: "Accountant" },
-];
-const DEMO_PASSWORD = "Passw0rd!";
-
 function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
   const { t } = useI18n();
   const next = params.get("next") || "/";
 
-  const [email, setEmail] = useState("avery@acme.test");
-  const [password, setPassword] = useState(DEMO_PASSWORD);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [twoFactor, setTwoFactor] = useState(false);
   const [code, setCode] = useState("");
@@ -126,35 +118,6 @@ function LoginForm() {
           {busy ? t("login.signingIn") : twoFactor ? t("login.verify") : t("login.signIn")}
         </button>
       </form>
-
-      {/* Demo accounts — fill credentials for the seeded users (password: Passw0rd!) */}
-      <div className="mt-8 rounded-2xl border border-border bg-surface-2/40 p-3 backdrop-blur-sm">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-2">
-          {t("login.demoAccounts")} <code>{DEMO_PASSWORD}</code>
-        </p>
-        <div className="grid grid-cols-2 gap-2">
-          {DEMO_ACCOUNTS.map((p) => (
-            <button
-              key={p.email}
-              type="button"
-              onClick={() => {
-                setEmail(p.email);
-                setPassword(DEMO_PASSWORD);
-                setError(null);
-              }}
-              className={
-                "rounded-xl border px-3 py-2 text-left text-xs transition-all " +
-                (email === p.email
-                  ? "border-primary bg-primary/10 text-primary shadow-sm"
-                  : "border-border bg-surface/50 hover:bg-surface-2 hover:border-border-strong")
-              }
-            >
-              <span className="block font-semibold">{p.name}</span>
-              <span className="block text-muted">{p.role}</span>
-            </button>
-          ))}
-        </div>
-      </div>
     </AuthLayout>
   );
 }

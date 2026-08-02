@@ -36,12 +36,15 @@ export function GoodsReceiptEditor({
   id,
   products,
   purchaseOrders,
+  initialPoId = "",
 }: {
   id: string;
   suppliers: EntityRecord[];
   products: EntityRecord[];
   warehouses: EntityRecord[];
   purchaseOrders: EntityRecord[];
+  /** Order to receive against, when the screen was opened from a pending order. */
+  initialPoId?: string;
 }) {
   const router = useRouter();
   const t = useT();
@@ -73,10 +76,15 @@ export function GoodsReceiptEditor({
   }
 
   useEffect(() => {
-    if (isNew) return;
+    // Opened from the pending-orders list: pull that order's outstanding lines
+    // straight away. Otherwise load the existing receipt.
+    if (isNew) {
+      if (initialPoId) pickPO(initialPoId).catch((e) => toast.error((e as Error).message));
+      return;
+    }
     load().catch((e) => toast.error((e as Error).message));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [id, initialPoId]);
 
   /** Pull the chosen PO's outstanding lines into the receipt. */
   async function pickPO(nextPoId: string) {

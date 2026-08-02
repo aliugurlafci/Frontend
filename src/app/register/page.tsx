@@ -27,7 +27,7 @@ export default function RegisterPage() {
           <label htmlFor="name" className="mb-1.5 block text-sm font-semibold">
             {t("auth.register.name")}
           </label>
-          <input id="name" type="text" placeholder="Avery Admin" className={AUTH_FIELD} />
+          <input id="name" type="text" placeholder={t("auth.register.name")} className={AUTH_FIELD} />
         </div>
 
         {/* Email */}

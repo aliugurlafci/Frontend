@@ -10,6 +10,7 @@ import { Badge, type Tone } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/utils/cn";
+import { useT } from "@/lib/i18n/client";
 
 type Priority = "high" | "medium" | "low";
 type FilterId = "all" | "active" | "completed";
@@ -25,14 +26,17 @@ export interface TodoRecord {
 
 const PRIORITY_TONE: Record<Priority, Tone> = { high: "danger", medium: "warning", low: "info" };
 
-const FILTERS: { id: FilterId; label: string }[] = [
-  { id: "all", label: "All" },
-  { id: "active", label: "Active" },
-  { id: "completed", label: "Completed" },
+/** Filter chips; labels come from `common.*` so they follow the language. */
+const FILTERS: { id: FilterId; labelKey: string }[] = [
+  { id: "all", labelKey: "common.all" },
+  { id: "active", labelKey: "common.active" },
+  { id: "completed", labelKey: "common.completed" },
 ];
 
 /** To-Do screen backed by the `todo` entity (persists to the backend/DB). */
 export function TodoBoard({ initial }: { initial: TodoRecord[] }) {
+  // `t` names a todo in the list loops below, so the translator is `tr` here.
+  const tr = useT();
   const [todos, setTodos] = useState<TodoRecord[]>(initial);
   const [filter, setFilter] = useState<FilterId>("all");
   const [draft, setDraft] = useState("");
@@ -42,7 +46,7 @@ export function TodoBoard({ initial }: { initial: TodoRecord[] }) {
   const [pending, startTransition] = useTransition();
 
   function fail(e: unknown) {
-    toast.error(e instanceof ApiRequestError ? e.message : "Something went wrong");
+    toast.error(e instanceof ApiRequestError ? e.message : tr("common.error"));
   }
 
   /** Replace a todo in-place with the server's authoritative copy. */
@@ -121,8 +125,8 @@ export function TodoBoard({ initial }: { initial: TodoRecord[] }) {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-lg font-semibold">To Do</h1>
-        <p className="text-xs text-muted">Keep track of your tasks and priorities</p>
+        <h1 className="text-lg font-semibold">{tr("nav.todo")}</h1>
+        <p className="text-xs text-muted">{tr("todo.subtitle")}</p>
       </div>
 
       <form
@@ -132,9 +136,9 @@ export function TodoBoard({ initial }: { initial: TodoRecord[] }) {
           add();
         }}
       >
-        <Input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Add a new task..." />
+        <Input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={tr("todo.addPlaceholder")} />
         <Button type="submit" variant="primary" size="md" disabled={pending}>
-          Add
+          {tr("common.add")}
         </Button>
       </form>
 
@@ -150,14 +154,14 @@ export function TodoBoard({ initial }: { initial: TodoRecord[] }) {
                 : "border-border text-muted hover:bg-surface-2",
             )}
           >
-            {f.label}
+            {tr(f.labelKey)}
           </button>
         ))}
       </div>
 
       <Card className="overflow-hidden">
         {visible.length === 0 ? (
-          <EmptyState icon="todo" title="No tasks" description="You're all caught up here." />
+          <EmptyState icon="todo" title={tr("todo.empty")} description={tr("todo.emptyDesc")} />
         ) : (
           <ul className="divide-y divide-border">
             {visible.map((t) =>
@@ -169,15 +173,15 @@ export function TodoBoard({ initial }: { initial: TodoRecord[] }) {
                     onChange={(e) => setEditPriority(e.target.value as Priority)}
                     className="w-28"
                   >
-                    <option value="high">high</option>
-                    <option value="medium">medium</option>
-                    <option value="low">low</option>
+                    <option value="high">{tr("todo.priority.high")}</option>
+                    <option value="medium">{tr("todo.priority.medium")}</option>
+                    <option value="low">{tr("todo.priority.low")}</option>
                   </Select>
                   <Button variant="primary" size="sm" onClick={saveEdit} disabled={pending}>
-                    Save
+                    {tr("common.save")}
                   </Button>
                   <Button size="sm" onClick={() => setEditingId(null)}>
-                    Cancel
+                    {tr("common.cancel")}
                   </Button>
                 </li>
               ) : (
@@ -191,18 +195,18 @@ export function TodoBoard({ initial }: { initial: TodoRecord[] }) {
                   <span className={cn("flex-1 text-sm", t.done ? "text-muted line-through" : "text-foreground")}>
                     {t.title}
                   </span>
-                  <Badge tone={PRIORITY_TONE[t.priority]}>{t.priority}</Badge>
+                  <Badge tone={PRIORITY_TONE[t.priority]}>{tr(`todo.priority.${t.priority}`)}</Badge>
                   <span className="text-xs text-muted-2">{t.dueDate ?? "—"}</span>
                   <button
                     onClick={() => startEdit(t)}
-                    aria-label="Edit task"
+                    aria-label={tr("todo.editTask")}
                     className="rounded p-1 text-muted-2 opacity-0 transition-opacity hover:bg-surface-2 hover:text-foreground group-hover:opacity-100"
                   >
                     <Icon name="edit" className="h-3.5 w-3.5" />
                   </button>
                   <button
                     onClick={() => remove(t)}
-                    aria-label="Delete task"
+                    aria-label={tr("todo.deleteTask")}
                     className="rounded p-1 text-muted-2 opacity-0 transition-opacity hover:bg-surface-2 hover:text-danger group-hover:opacity-100"
                   >
                     <Icon name="trash" className="h-3.5 w-3.5" />

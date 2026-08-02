@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { BrandLockup } from "@/components/ui/brand-mark";
 import { cn } from "@/lib/utils/cn";
 
 /** Shared glass input style for the standalone auth/status screens (taller than the in-app Input). */
@@ -9,16 +10,9 @@ export const AUTH_FIELD =
 export const AUTH_BUTTON =
   "inline-flex h-11 w-full items-center justify-center rounded-xl bg-gradient-to-b from-primary to-primary-hover text-sm font-semibold text-primary-foreground shadow-[0_10px_26px_-8px_var(--primary)] transition-all hover:brightness-110 active:translate-y-px disabled:opacity-60";
 
-/** Aula brand lockup (gradient badge + wordmark) used atop the auth screens. */
+/** Aula brand lockup (crate badge + wordmark) used atop the auth screens. */
 export function AuthBrand() {
-  return (
-    <div className="mb-6 flex items-center justify-center gap-2.5">
-      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-primary-hover text-xl font-bold text-primary-foreground shadow-[0_10px_26px_-6px_var(--primary)]">
-        A
-      </div>
-      <span className="text-2xl font-bold tracking-tight">Aula CRM</span>
-    </div>
-  );
+  return <BrandLockup size="lg" className="mb-6 justify-center" />;
 }
 
 /**

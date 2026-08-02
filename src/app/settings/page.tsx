@@ -77,7 +77,10 @@ export default async function SettingsPage() {
   const sections = SECTIONS.filter((s) => access.can(s.area, "read"));
   const canWorkspace = access.can("settings.workspace", "read");
   const canFlags = access.can("settings.featureFlags", "read");
-  const canMetadata = access.can("settings.metadata", "read");
+  // The data model is infrastructure, not tenant configuration — administrators
+  // only, and the area is kept out of the permission matrix entirely.
+  const isAdmin = ctx.roles.includes("admin");
+  const canMetadata = isAdmin;
   const canImport = access.can("settings.import", "read");
   const canExport = access.can("settings.export", "read");
   const canReleases = access.can("settings.releases", "read");
@@ -90,6 +93,15 @@ export default async function SettingsPage() {
     .map((e) => ({ name: e.name, label: entityLabel(e, locale, { plural: true }) }))
     .sort((a, b) => a.label.localeCompare(b.label, locale));
   const releases = canReleases ? await serverApi.releases().catch(() => []) : [];
+  // The Account card shows the company this user belongs to (set when the user
+  // was created); it falls back to the tenant id when none is assigned yet.
+  const me = await serverApi.me();
+  const companyName = me.companyId
+    ? await serverApi
+        .get("company", me.companyId)
+        .then((c) => String(c.name ?? ""))
+        .catch(() => "")
+    : "";
 
   const entitySummaries: EntitySummary[] = entities.map((e) => ({
     name: e.name,
@@ -169,7 +181,7 @@ export default async function SettingsPage() {
               </div>
             </div>
             <div className="space-y-0.5 border-t border-border pt-2">
-              <CopyField label={t("settings.tenant")} value={ctx.tenantId} mono />
+              <CopyField label={t("settings.tenant")} value={companyName || ctx.tenantId} mono={!companyName} />
               <CopyField label={t("settings.org")} value={ctx.orgId} mono />
               <CopyField label={t("settings.userId")} value={ctx.userId} mono />
               <div className="flex items-center justify-between px-2 py-1.5">
@@ -230,7 +242,7 @@ export default async function SettingsPage() {
         <MetadataExplorer
           version={metadata.version}
           entities={entitySummaries}
-          canPublish={access.can("settings.metadata", "publish")}
+          canPublish={isAdmin}
         />
       )}
 

@@ -1,24 +1,53 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
+import { apiFetch } from "@/lib/api-client";
 import { useI18n } from "@/lib/i18n/context";
 import { AuthLayout, AUTH_FIELD, AUTH_BUTTON } from "@/components/ui/auth-layout";
+
+/** First letters of the first two words of a name (avatar fallback). */
+function initials(name: string): string {
+  return (
+    name
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((p) => p[0]?.toUpperCase())
+      .join("") || "?"
+  );
+}
 
 export default function LockScreenPage() {
   const router = useRouter();
   const { t } = useI18n();
   const [showPassword, setShowPassword] = useState(false);
+  // The locked session still identifies its user — show who is signed in.
+  const [displayName, setDisplayName] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    apiFetch<{ displayName?: string }>("/auth/me")
+      .then((me) => {
+        if (active) setDisplayName(me?.displayName ?? "");
+      })
+      .catch(() => {
+        /* not signed in — the form still routes to the login gate */
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
     <AuthLayout center>
       {/* Avatar */}
       <div className="mb-5 flex flex-col items-center">
         <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/20 to-secondary/15 text-lg font-bold text-primary ring-1 ring-primary/20">
-          AA
+          {displayName ? initials(displayName) : "—"}
         </div>
-        <p className="mt-3 text-base font-semibold text-foreground">Avery Admin</p>
+        {displayName && <p className="mt-3 text-base font-semibold text-foreground">{displayName}</p>}
       </div>
 
       <h1 className="text-center text-2xl font-bold tracking-tight">{t("auth.lock.title")}</h1>

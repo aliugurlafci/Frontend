@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Icon } from "@/components/ui/icon";
+import { BrandLockup } from "@/components/ui/brand-mark";
 import { cn } from "@/lib/utils/cn";
 import { groupNav, hrefOf, type NavItem } from "./sidebar";
 import { useI18n } from "@/lib/i18n/context";
@@ -55,12 +56,7 @@ export function MobileNav({
         className="glass-strong relative flex h-full w-64 flex-col border-r border-border shadow-[var(--shadow-lg)] animate-rise"
       >
         <div className="flex h-14 items-center justify-between border-b border-border px-3.5">
-          <span className="flex items-center gap-2.5 text-sm font-semibold">
-            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary-hover text-sm font-bold text-primary-foreground shadow-[0_4px_14px_-4px_var(--primary)]">
-              A
-            </span>
-            Aula CRM
-          </span>
+          <BrandLockup />
           <button onClick={onClose} aria-label="Close menu" className="rounded-lg p-1 text-muted transition-colors hover:bg-surface-2">
             <Icon name="close" />
           </button>

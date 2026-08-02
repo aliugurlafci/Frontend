@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { cookies } from "next/headers";
 import { Toaster } from "sonner";
@@ -14,13 +14,43 @@ import { serverApi } from "@/lib/http/server-api";
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
+const SITE_URL = process.env.AULA_SITE_URL ?? "http://localhost:3000";
+const OG_DESCRIPTION = "Inventory, point of sale and sales in one workspace.";
+
 export const metadata: Metadata = {
+  // Absolute base for the social-card image below (relative URLs need it).
+  metadataBase: new URL(SITE_URL),
   title: "Aula CRM",
   description: "Metadata-driven, multi-tenant CRM",
+  applicationName: "Aula CRM",
   // Indexable by search engines. (Authenticated app routes redirect
   // unauthenticated visitors — including crawlers — to /login, so private data
   // never reaches the index even though pages are not explicitly noindex.)
   robots: { index: true, follow: true },
+  // The favicon / apple-touch icon come from the file conventions next to this
+  // file (favicon.ico, apple-icon.png); the manifest adds the install icons.
+  manifest: "/manifest.webmanifest",
+  openGraph: {
+    type: "website",
+    siteName: "Aula CRM",
+    title: "Aula CRM",
+    description: OG_DESCRIPTION,
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "Aula CRM" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Aula CRM",
+    description: OG_DESCRIPTION,
+    images: ["/og-image.png"],
+  },
+};
+
+/** Browser/OS chrome colour — the accent in light UI, the app backdrop in dark. */
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#eef2f9" },
+    { media: "(prefers-color-scheme: dark)", color: "#070a10" },
+  ],
 };
 
 // Runs before paint to apply theme + accent + density + text size + motion from
@@ -44,7 +74,15 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   }
 
   return (
-    <html lang={locale} className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
+    // `suppressHydrationWarning` covers this element's own attributes only: the
+    // no-flash script below deliberately mutates <html> (the `dark` class, the
+    // accent custom properties, the data-density/font/motion attributes) before
+    // React hydrates, so the DOM legitimately differs from the server markup.
+    <html
+      lang={locale}
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
+    >
       <head>
         <script dangerouslySetInnerHTML={{ __html: noFlashScript(settings) }} />
       </head>

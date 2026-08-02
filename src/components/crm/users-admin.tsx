@@ -16,6 +16,7 @@ export interface UserRecord {
   email: string;
   displayName: string;
   positionId: string;
+  companyId: string;
   managerId: string;
   phone: string;
   jobTitle: string;
@@ -26,6 +27,11 @@ export interface PositionOption {
   id: string;
   name: string;
 }
+/** A selectable company (the legal entity a user belongs to). */
+export interface CompanyOption {
+  id: string;
+  name: string;
+}
 
 interface EditDraft {
   id: string;
@@ -33,6 +39,7 @@ interface EditDraft {
   email: string;
   phone: string;
   jobTitle: string;
+  companyId: string;
 }
 
 /** What the signed-in position may do here — one flag per `settings.users` grant. */
@@ -52,10 +59,12 @@ const FULL_CAPS: UserAdminCaps = { create: true, update: true, password: true, t
 export function UsersAdmin({
   initial,
   positions,
+  companies,
   caps = FULL_CAPS,
 }: {
   initial: UserRecord[];
   positions: PositionOption[];
+  companies: CompanyOption[];
   caps?: UserAdminCaps;
 }) {
   const { t } = useI18n();
@@ -68,16 +77,24 @@ export function UsersAdmin({
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
   const [positionId, setPositionId] = useState(positions[0]?.id ?? "");
+  const [companyId, setCompanyId] = useState("");
   const [pending, startTransition] = useTransition();
 
   const positionName = (id: string) => positions.find((p) => p.id === id)?.name ?? "—";
+  const companyName = (id: string) => companies.find((c) => c.id === id)?.name ?? "—";
   const userName = (id: string) => users.find((u) => u.id === id)?.displayName ?? "—";
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return users;
-    return users.filter((u) => u.displayName.toLowerCase().includes(q) || u.email.toLowerCase().includes(q));
-  }, [users, query]);
+    const nameOf = (id: string) => companies.find((c) => c.id === id)?.name ?? "";
+    return users.filter(
+      (u) =>
+        u.displayName.toLowerCase().includes(q) ||
+        u.email.toLowerCase().includes(q) ||
+        nameOf(u.companyId).toLowerCase().includes(q),
+    );
+  }, [users, query, companies]);
 
   function fail(e: unknown) {
     toast.error(e instanceof ApiRequestError ? e.message : t("settings.users.somethingWrong"));
@@ -91,6 +108,7 @@ export function UsersAdmin({
               email: String(raw.email ?? u.email),
               displayName: String(raw.displayName ?? u.displayName),
               positionId: String(raw.positionId ?? u.positionId),
+              companyId: raw.companyId ? String(raw.companyId) : "",
               managerId: raw.managerId ? String(raw.managerId) : "",
               phone: (raw.phone as string | null) ?? "",
               jobTitle: (raw.jobTitle as string | null) ?? "",
@@ -111,7 +129,14 @@ export function UsersAdmin({
       try {
         const created = await apiFetch<Record<string, unknown>>("/admin/users", {
           method: "POST",
-          body: { email: email.trim(), displayName: displayName.trim() || email.trim(), password, positionId, active: true },
+          body: {
+            email: email.trim(),
+            displayName: displayName.trim() || email.trim(),
+            password,
+            positionId,
+            companyId: companyId || null,
+            active: true,
+          },
         });
         setUsers((prev) => [
           ...prev,
@@ -120,6 +145,7 @@ export function UsersAdmin({
             email: String(created.email ?? ""),
             displayName: String(created.displayName ?? ""),
             positionId: String(created.positionId ?? ""),
+            companyId: created.companyId ? String(created.companyId) : "",
             managerId: created.managerId ? String(created.managerId) : "",
             phone: (created.phone as string | null) ?? "",
             jobTitle: (created.jobTitle as string | null) ?? "",
@@ -130,6 +156,7 @@ export function UsersAdmin({
         setEmail("");
         setDisplayName("");
         setPassword("");
+        setCompanyId("");
         setCreating(false);
         toast.success(t("settings.users.created"));
       } catch (e) {
@@ -162,6 +189,7 @@ export function UsersAdmin({
       email: editing.email.trim(),
       phone: editing.phone.trim() || null,
       jobTitle: editing.jobTitle.trim() || null,
+      companyId: editing.companyId || null,
     };
     startTransition(async () => {
       try {
@@ -206,15 +234,36 @@ export function UsersAdmin({
         <Card>
           <CardHeader title={t("settings.users.newUser")} />
           <CardBody>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder={t("settings.users.phEmail")} type="email" />
-              <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder={t("settings.users.phName")} />
-              <Input value={password} onChange={(e) => setPassword(e.target.value)} placeholder={t("settings.users.phPassword")} type="password" />
-              <Select value={positionId} onChange={(e) => setPositionId(e.target.value)}>
-                {positions.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </Select>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div>
+                <Label>{t("settings.users.colEmail")}</Label>
+                <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder={t("settings.users.phEmail")} type="email" />
+              </div>
+              <div>
+                <Label>{t("settings.users.colName")}</Label>
+                <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder={t("settings.users.phName")} />
+              </div>
+              <div>
+                <Label>{t("settings.users.phPassword")}</Label>
+                <Input value={password} onChange={(e) => setPassword(e.target.value)} placeholder={t("settings.users.phPassword")} type="password" />
+              </div>
+              <div>
+                <Label>{t("settings.users.colPosition")}</Label>
+                <Select value={positionId} onChange={(e) => setPositionId(e.target.value)}>
+                  {positions.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </Select>
+              </div>
+              <div>
+                <Label>{t("settings.users.colCompany")}</Label>
+                <Select value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
+                  <option value="">{t("settings.users.noCompany")}</option>
+                  {companies.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </Select>
+              </div>
             </div>
             <div className="mt-3 flex justify-end gap-2">
               <Button variant="secondary" size="sm" onClick={() => setCreating(false)} disabled={pending}>
@@ -249,6 +298,15 @@ export function UsersAdmin({
                 <Label>{t("settings.users.jobTitle")}</Label>
                 <Input value={editing.jobTitle} onChange={(e) => setEditing({ ...editing, jobTitle: e.target.value })} />
               </div>
+              <div>
+                <Label>{t("settings.users.colCompany")}</Label>
+                <Select value={editing.companyId} onChange={(e) => setEditing({ ...editing, companyId: e.target.value })}>
+                  <option value="">{t("settings.users.noCompany")}</option>
+                  {companies.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </Select>
+              </div>
             </div>
             <div className="mt-3 flex justify-end gap-2">
               <Button variant="secondary" size="sm" onClick={() => setEditing(null)} disabled={pending}>
@@ -273,6 +331,7 @@ export function UsersAdmin({
             <tr className="border-b border-border text-left text-xs font-medium uppercase tracking-wide text-muted-2">
               <th className="px-4 py-2.5">{t("settings.users.colName")}</th>
               <th className="px-4 py-2.5">{t("settings.users.colEmail")}</th>
+              <th className="px-4 py-2.5">{t("settings.users.colCompany")}</th>
               <th className="px-4 py-2.5">{t("settings.users.colPosition")}</th>
               <th className="px-4 py-2.5">{t("settings.users.colManager")}</th>
               <th className="px-4 py-2.5">{t("settings.users.col2fa")}</th>
@@ -288,6 +347,7 @@ export function UsersAdmin({
                   {u.jobTitle && <div className="text-xs text-muted">{u.jobTitle}</div>}
                 </td>
                 <td className="px-4 py-3 text-muted">{u.email}</td>
+                <td className="px-4 py-3 text-muted">{companyName(u.companyId)}</td>
                 <td className="px-4 py-3">
                   <Select value={u.positionId} disabled={!caps.update} onChange={(e) => patch(u.id, { positionId: e.target.value }, t("settings.users.positionUpdated"))} className="h-8 w-40">
                     {positions.map((p) => (
@@ -316,7 +376,7 @@ export function UsersAdmin({
                 <td className="px-4 py-3 text-right">
                   <div className="flex flex-wrap justify-end gap-1.5">
                     {caps.update && (
-                      <Button variant="ghost" size="xs" onClick={() => { setEditing({ id: u.id, displayName: u.displayName, email: u.email, phone: u.phone, jobTitle: u.jobTitle }); setCreating(false); }}>
+                      <Button variant="ghost" size="xs" onClick={() => { setEditing({ id: u.id, displayName: u.displayName, email: u.email, phone: u.phone, jobTitle: u.jobTitle, companyId: u.companyId }); setCreating(false); }}>
                         {t("common.edit")}
                       </Button>
                     )}
@@ -341,7 +401,7 @@ export function UsersAdmin({
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-muted">
+                <td colSpan={8} className="px-4 py-8 text-center text-muted">
                   {t("settings.users.none")}
                 </td>
               </tr>

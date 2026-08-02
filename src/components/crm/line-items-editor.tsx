@@ -6,6 +6,7 @@ import { formatMoney } from "@/lib/finance/money";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { Icon } from "@/components/ui/icon";
+import { useT } from "@/lib/i18n/client";
 
 export interface EditableLine {
   productId: string | null;
@@ -36,6 +37,8 @@ export function LineItemsEditor({
   priceSource?: "unitPrice" | "costPrice";
   onChange: (lines: EditableLine[]) => void;
 }) {
+  const t = useT();
+
   function update(i: number, patch: Partial<EditableLine>) {
     onChange(lines.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
   }
@@ -69,11 +72,11 @@ export function LineItemsEditor({
       <table className="w-full text-sm">
         <thead className="border-b border-border bg-surface-2 text-left text-xs uppercase text-muted">
           <tr>
-            <th className="px-2 py-2 font-medium">Product / Description</th>
-            <th className="w-20 px-2 py-2 font-medium">Qty</th>
-            <th className="w-28 px-2 py-2 font-medium">Unit Price</th>
-            <th className="w-20 px-2 py-2 font-medium">Tax %</th>
-            <th className="w-28 px-2 py-2 text-right font-medium">Total</th>
+            <th className="px-2 py-2 font-medium">{t("lines.product")}</th>
+            <th className="w-20 px-2 py-2 font-medium">{t("lines.qty")}</th>
+            <th className="w-28 px-2 py-2 font-medium">{t("lines.unitPrice")}</th>
+            <th className="w-20 px-2 py-2 font-medium">{t("lines.taxRate")}</th>
+            <th className="w-28 px-2 py-2 text-right font-medium">{t("lines.total")}</th>
             {!readOnly && <th className="w-8" />}
           </tr>
         </thead>
@@ -83,12 +86,12 @@ export function LineItemsEditor({
               <td className="px-2 py-1.5">
                 {!readOnly && (
                   <Select
-                    aria-label="Product"
+                    aria-label={t("lines.product")}
                     value={l.productId ?? ""}
                     onChange={(e) => pickProduct(i, e.target.value)}
                     className="mb-1 h-8 text-xs"
                   >
-                    <option value="">— Custom —</option>
+                    <option value="">{t("lines.custom")}</option>
                     {products.map((p) => (
                       <option key={p.id} value={p.id}>
                         {String(p.name)}
@@ -100,11 +103,11 @@ export function LineItemsEditor({
                   <span>{l.description}</span>
                 ) : (
                   <Input
-                    aria-label="Description"
+                    aria-label={t("lines.description")}
                     value={l.description}
                     onChange={(e) => update(i, { description: e.target.value })}
                     className="h-8 text-xs"
-                    placeholder="Description"
+                    placeholder={t("lines.description")}
                   />
                 )}
               </td>
@@ -113,7 +116,7 @@ export function LineItemsEditor({
                   l.qty
                 ) : (
                   <Input
-                    aria-label="Qty"
+                    aria-label={t("lines.qty")}
                     type="number"
                     value={String(l.qty)}
                     onChange={(e) => update(i, { qty: Number(e.target.value) })}
@@ -126,7 +129,7 @@ export function LineItemsEditor({
                   formatMoney(l.unitPrice, currencyCode)
                 ) : (
                   <Input
-                    aria-label="Unit price"
+                    aria-label={t("lines.unitPrice")}
                     type="number"
                     value={String(l.unitPrice)}
                     onChange={(e) => update(i, { unitPrice: Number(e.target.value) })}
@@ -139,7 +142,7 @@ export function LineItemsEditor({
                   `${l.taxRate}%`
                 ) : (
                   <Input
-                    aria-label="Tax rate"
+                    aria-label={t("lines.taxRate")}
                     type="number"
                     value={String(l.taxRate)}
                     onChange={(e) => update(i, { taxRate: Number(e.target.value) })}
@@ -152,7 +155,7 @@ export function LineItemsEditor({
                 <td className="px-1 py-1.5">
                   <button
                     onClick={() => onChange(lines.filter((_, idx) => idx !== i))}
-                    aria-label="Remove line"
+                    aria-label={t("lines.remove")}
                     className="text-muted hover:text-danger"
                   >
                     <Icon name="trash" className="h-3.5 w-3.5" />
@@ -164,7 +167,7 @@ export function LineItemsEditor({
           {lines.length === 0 && (
             <tr>
               <td colSpan={readOnly ? 5 : 6} className="px-3 py-4 text-center text-xs text-muted">
-                No line items.
+                {t("lines.empty")}
               </td>
             </tr>
           )}
@@ -172,21 +175,21 @@ export function LineItemsEditor({
         <tfoot className="border-t border-border bg-surface-2">
           <tr>
             <td colSpan={readOnly ? 4 : 5} className="px-2 py-1.5 text-right text-xs text-muted">
-              Subtotal
+              {t("lines.subtotal")}
             </td>
             <td className="px-2 py-1.5 text-right tabular-nums">{formatMoney(totals.subtotal, currencyCode)}</td>
             {!readOnly && <td />}
           </tr>
           <tr>
             <td colSpan={readOnly ? 4 : 5} className="px-2 py-1.5 text-right text-xs text-muted">
-              Tax
+              {t("lines.tax")}
             </td>
             <td className="px-2 py-1.5 text-right tabular-nums">{formatMoney(totals.tax, currencyCode)}</td>
             {!readOnly && <td />}
           </tr>
           <tr>
             <td colSpan={readOnly ? 4 : 5} className="px-2 py-1.5 text-right text-sm font-semibold">
-              Total
+              {t("lines.total")}
             </td>
             <td className="px-2 py-1.5 text-right text-sm font-semibold tabular-nums">
               {formatMoney(totals.subtotal + totals.tax, currencyCode)}
@@ -198,7 +201,7 @@ export function LineItemsEditor({
       {!readOnly && (
         <div className="border-t border-border p-2">
           <Button size="sm" onClick={() => onChange([...lines, emptyLine()])}>
-            <Icon name="plus" className="h-3.5 w-3.5" /> Add line
+            <Icon name="plus" className="h-3.5 w-3.5" /> {t("lines.add")}
           </Button>
         </div>
       )}

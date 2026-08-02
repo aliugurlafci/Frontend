@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Icon } from "@/components/ui/icon";
+import { BrandLockup } from "@/components/ui/brand-mark";
 import { cn } from "@/lib/utils/cn";
 import { useI18n } from "@/lib/i18n/context";
 
@@ -128,10 +129,7 @@ export function Sidebar({
       )}
     >
       <div className="flex h-14 items-center gap-2.5 border-b border-border px-3.5">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary-hover text-sm font-bold text-primary-foreground shadow-[0_4px_14px_-4px_var(--primary)]">
-          A
-        </div>
-        {!collapsed && <span className="text-sm font-semibold tracking-tight">Aula CRM</span>}
+        <BrandLockup wordmark={!collapsed} />
       </div>
       <div className="flex-1 space-y-0.5 overflow-y-auto p-2.5">
         <NavLink href="/" active={path === "/"} icon="home" label={t("nav.home")} collapsed={collapsed} />

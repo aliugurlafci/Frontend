@@ -27,6 +27,14 @@ export function Drawer({
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const [mounted, setMounted] = useState(false);
+  // Callers pass an inline arrow, so `onClose` is a new function on every render.
+  // Keeping it in a ref lets the focus/Escape effect depend on `open` alone —
+  // otherwise it tore down and re-ran on each keystroke, and its cleanup pulled
+  // focus out of whatever field was being typed into.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
 
   // Portals need a client-side DOM target; mount-gate avoids SSR/hydration use.
   useEffect(() => setMounted(true), []);
@@ -37,15 +45,17 @@ export function Drawer({
     // (otherwise keyboard/screen-reader focus is dropped to <body>).
     const previouslyFocused = document.activeElement as HTMLElement | null;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") onCloseRef.current();
     };
     document.addEventListener("keydown", onKey);
-    panelRef.current?.focus();
+    // Focus the panel when it opens — but never steal focus from a field inside
+    // it that already claimed it (e.g. an `autoFocus` input).
+    if (!panelRef.current?.contains(document.activeElement)) panelRef.current?.focus();
     return () => {
       document.removeEventListener("keydown", onKey);
       previouslyFocused?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open || !mounted) return null;
 

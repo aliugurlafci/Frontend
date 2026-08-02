@@ -32,15 +32,8 @@ const FALLBACK_PRODUCT = {
   uom: "ea",
 } as unknown as EntityRecord;
 
-const FIELD_OPTIONS: { value: LabelField; label: string }[] = [
-  { value: "name", label: "Name" },
-  { value: "sku", label: "SKU" },
-  { value: "barcode", label: "Barcode value" },
-  { value: "unitPrice", label: "Price" },
-  { value: "costPrice", label: "Cost price" },
-  { value: "uom", label: "Unit" },
-  { value: "currencyCode", label: "Currency" },
-];
+/** Product fields an element can bind to; labels resolve via `ld.field.*`. */
+const FIELD_OPTIONS: LabelField[] = ["name", "sku", "barcode", "unitPrice", "costPrice", "uom", "currencyCode"];
 
 function defaultElement(type: LabelElementType): LabelElement {
   const base = { id: newElementId(), x: 3, y: 3, type, color: "#000000" };
@@ -299,7 +292,7 @@ export function LabelDesigner() {
               <div className="flex items-center gap-2 text-xs">
                 <span className="text-muted">{t("label.sample")}</span>
                 <Select value={sampleId} onChange={(e) => setSampleId(e.target.value)} className="h-7 w-40 text-xs">
-                  <option value="">Sample product</option>
+                  <option value="">{t("ld.sampleProduct")}</option>
                   {products.map((p) => (
                     <option key={p.id} value={p.id}>
                       {String(p.name)}
@@ -375,7 +368,7 @@ export function LabelDesigner() {
             {!selected ? (
               <>
                 <div>
-                  <Label htmlFor="tname">Template name</Label>
+                  <Label htmlFor="tname">{t("ld.templateName")}</Label>
                   <Input id="tname" value={template.name} onChange={(e) => setTemplate((t) => ({ ...t, name: e.target.value }))} />
                 </div>
                 <div className="grid grid-cols-2 gap-2">
@@ -389,7 +382,7 @@ export function LabelDesigner() {
                   </div>
                 </div>
                 <div>
-                  <Label htmlFor="preset">Preset size</Label>
+                  <Label htmlFor="preset">{t("ld.presetSize")}</Label>
                   <Select
                     id="preset"
                     onChange={(e) => {
@@ -437,6 +430,7 @@ const SectionTitle = ({ children }: { children: ReactNode }) => (
 );
 
 function ElementProps({ el, onChange, onRemove }: { el: LabelElement; onChange: (p: Partial<LabelElement>) => void; onRemove: () => void }) {
+  const t = useT();
   const [uploading, setUploading] = useState(false);
   const num = (v: string) => Number(v) || 0;
   const isText = el.type === "text";
@@ -457,7 +451,7 @@ function ElementProps({ el, onChange, onRemove }: { el: LabelElement; onChange: 
       form.append("file", file);
       const rec = await apiUpload<{ id: string }>("/files/upload", form);
       onChange({ imageSource: "static", imageId: String(rec.id) });
-      toast.success("Image uploaded");
+      toast.success(t("ld.imageUploaded"));
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -469,7 +463,7 @@ function ElementProps({ el, onChange, onRemove }: { el: LabelElement; onChange: 
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium uppercase text-muted">{el.type}</span>
-        <button onClick={onRemove} className="text-muted hover:text-danger" aria-label="Remove element">
+        <button onClick={onRemove} className="text-muted hover:text-danger" aria-label={t("ld.removeElement")}>
           <Icon name="trash" className="h-3.5 w-3.5" />
         </button>
       </div>
@@ -477,18 +471,18 @@ function ElementProps({ el, onChange, onRemove }: { el: LabelElement; onChange: 
       {/* ---- content ---- */}
       {isText && (
         <div>
-          <Label htmlFor="text">Text</Label>
+          <Label htmlFor="text">{t("ld.text")}</Label>
           <Input id="text" value={el.text ?? ""} onChange={(e) => onChange({ text: e.target.value })} />
         </div>
       )}
 
       {isFieldBound && (
         <div>
-          <Label htmlFor="field">{isBarcode ? "Value field" : "Field"}</Label>
+          <Label htmlFor="field">{isBarcode ? t("ld.valueField") : t("ld.field")}</Label>
           <Select id="field" value={el.field ?? "name"} onChange={(e) => onChange({ field: e.target.value as LabelField })}>
-            {FIELD_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
+            {FIELD_OPTIONS.map((f) => (
+              <option key={f} value={f}>
+                {t(`ld.field.${f}`)}
               </option>
             ))}
           </Select>
@@ -498,11 +492,11 @@ function ElementProps({ el, onChange, onRemove }: { el: LabelElement; onChange: 
       {hasAffix && (
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <Label htmlFor="prefix">Prefix</Label>
+            <Label htmlFor="prefix">{t("ld.prefix")}</Label>
             <Input id="prefix" value={el.prefix ?? ""} onChange={(e) => onChange({ prefix: e.target.value })} placeholder="e.g. ₺" />
           </div>
           <div>
-            <Label htmlFor="suffix">Suffix</Label>
+            <Label htmlFor="suffix">{t("ld.suffix")}</Label>
             <Input id="suffix" value={el.suffix ?? ""} onChange={(e) => onChange({ suffix: e.target.value })} placeholder="e.g. /ad" />
           </div>
         </div>
@@ -511,18 +505,18 @@ function ElementProps({ el, onChange, onRemove }: { el: LabelElement; onChange: 
       {isBarcode && (
         <>
           <div>
-            <Label htmlFor="bt">Symbology</Label>
+            <Label htmlFor="bt">{t("ld.symbology")}</Label>
             <Select id="bt" value={el.barcodeType ?? "auto"} onChange={(e) => onChange({ barcodeType: e.target.value as LabelElement["barcodeType"] })}>
-              <option value="auto">Auto (from product)</option>
+              <option value="auto">{t("ld.symbology.auto")}</option>
               <option value="ean13">EAN-13</option>
               <option value="upc">UPC-A</option>
               <option value="code128">Code 128</option>
-              <option value="qr">QR Code</option>
+              <option value="qr">{t("ld.symbology.qr")}</option>
             </Select>
           </div>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={el.showValue ?? true} onChange={(e) => onChange({ showValue: e.target.checked })} />
-            Show value
+            {t("ld.showValue")}
           </label>
         </>
       )}
@@ -530,15 +524,15 @@ function ElementProps({ el, onChange, onRemove }: { el: LabelElement; onChange: 
       {isImage && (
         <>
           <div>
-            <Label htmlFor="imgsrc">Image source</Label>
+            <Label htmlFor="imgsrc">{t("ld.imageSource")}</Label>
             <Select id="imgsrc" value={el.imageSource ?? "product"} onChange={(e) => onChange({ imageSource: e.target.value as "product" | "static" })}>
-              <option value="product">Product image</option>
-              <option value="static">Uploaded image</option>
+              <option value="product">{t("ld.imageSource.product")}</option>
+              <option value="static">{t("ld.imageSource.static")}</option>
             </Select>
           </div>
           {(el.imageSource ?? "product") === "static" && (
             <div>
-              <Label>Image file</Label>
+              <Label>{t("ld.imageFile")}</Label>
               <input
                 type="file"
                 accept="image/*"
@@ -548,16 +542,16 @@ function ElementProps({ el, onChange, onRemove }: { el: LabelElement; onChange: 
                 }}
                 className="block w-full text-xs"
               />
-              {uploading && <p className="mt-1 text-xs text-muted">Uploading…</p>}
-              {!uploading && el.imageId && <p className="mt-1 text-xs text-muted">Selected image #{el.imageId}</p>}
+              {uploading && <p className="mt-1 text-xs text-muted">{t("ld.uploading")}</p>}
+              {!uploading && el.imageId && <p className="mt-1 text-xs text-muted">{t("ld.selectedImage", { id: String(el.imageId) })}</p>}
             </div>
           )}
           <div>
-            <Label htmlFor="fit">Fit</Label>
+            <Label htmlFor="fit">{t("ld.fit")}</Label>
             <Select id="fit" value={el.imageFit ?? "contain"} onChange={(e) => onChange({ imageFit: e.target.value as "contain" | "cover" | "fill" })}>
-              <option value="contain">Contain</option>
-              <option value="cover">Cover</option>
-              <option value="fill">Fill</option>
+              <option value="contain">{t("ld.fit.contain")}</option>
+              <option value="cover">{t("ld.fit.cover")}</option>
+              <option value="fill">{t("ld.fit.fill")}</option>
             </Select>
           </div>
         </>
@@ -566,9 +560,9 @@ function ElementProps({ el, onChange, onRemove }: { el: LabelElement; onChange: 
       {/* ---- typography ---- */}
       {hasFont && (
         <>
-          <SectionTitle>Typography</SectionTitle>
+          <SectionTitle>{t("ld.typography")}</SectionTitle>
           <div>
-            <Label htmlFor="ff">Font</Label>
+            <Label htmlFor="ff">{t("ld.font")}</Label>
             <Select id="ff" value={el.fontFamily ?? LABEL_FONTS[0].value} onChange={(e) => onChange({ fontFamily: e.target.value })}>
               {LABEL_FONTS.map((f) => (
                 <option key={f.value} value={f.value}>
@@ -579,66 +573,66 @@ function ElementProps({ el, onChange, onRemove }: { el: LabelElement; onChange: 
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <Label htmlFor="fs">Size (pt)</Label>
+              <Label htmlFor="fs">{t("ld.fontSize")}</Label>
               <Input id="fs" type="number" value={el.fontSize ?? 10} onChange={(e) => onChange({ fontSize: num(e.target.value) })} />
             </div>
             <div>
-              <Label htmlFor="fw">Weight</Label>
+              <Label htmlFor="fw">{t("ld.weight")}</Label>
               <Select id="fw" value={el.fontWeight ?? "normal"} onChange={(e) => onChange({ fontWeight: e.target.value as "normal" | "bold" })}>
-                <option value="normal">Normal</option>
-                <option value="bold">Bold</option>
+                <option value="normal">{t("ld.weight.normal")}</option>
+                <option value="bold">{t("ld.weight.bold")}</option>
               </Select>
             </div>
             <div>
-              <Label htmlFor="fst">Style</Label>
+              <Label htmlFor="fst">{t("ld.style")}</Label>
               <Select id="fst" value={el.fontStyle ?? "normal"} onChange={(e) => onChange({ fontStyle: e.target.value as "normal" | "italic" })}>
-                <option value="normal">Normal</option>
-                <option value="italic">Italic</option>
+                <option value="normal">{t("ld.style.normal")}</option>
+                <option value="italic">{t("ld.style.italic")}</option>
               </Select>
             </div>
             <div>
-              <Label htmlFor="al">Align</Label>
+              <Label htmlFor="al">{t("ld.align")}</Label>
               <Select id="al" value={el.align ?? "left"} onChange={(e) => onChange({ align: e.target.value as "left" | "center" | "right" })}>
-                <option value="left">Left</option>
-                <option value="center">Center</option>
-                <option value="right">Right</option>
+                <option value="left">{t("ld.align.left")}</option>
+                <option value="center">{t("ld.align.center")}</option>
+                <option value="right">{t("ld.align.right")}</option>
               </Select>
             </div>
             <div>
-              <Label htmlFor="lh">Line height</Label>
+              <Label htmlFor="lh">{t("ld.lineHeight")}</Label>
               <Input id="lh" type="number" step="0.1" value={el.lineHeight ?? 1.1} onChange={(e) => onChange({ lineHeight: Number(e.target.value) || 1.1 })} />
             </div>
             <div>
-              <Label htmlFor="ls">Letter sp. (mm)</Label>
+              <Label htmlFor="ls">{t("ld.letterSpacing")}</Label>
               <Input id="ls" type="number" step="0.1" value={el.letterSpacing ?? 0} onChange={(e) => onChange({ letterSpacing: num(e.target.value) })} />
             </div>
           </div>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={el.wrap ?? false} onChange={(e) => onChange({ wrap: e.target.checked })} />
-            Wrap text
+            {t("ld.wrapText")}
           </label>
         </>
       )}
 
       {/* ---- appearance ---- */}
-      <SectionTitle>Appearance</SectionTitle>
+      <SectionTitle>{t("ld.appearance")}</SectionTitle>
       <div className="grid grid-cols-2 gap-2">
         {!isImage && (
           <ColorField
-            label={isLine || isRect ? "Color" : "Text color"}
+            label={isLine || isRect ? t("ld.color") : t("ld.textColor")}
             value={el.color}
             onChange={(v) => onChange({ color: v })}
           />
         )}
         {!isLine && (
           <div>
-            <Label>Background</Label>
+            <Label>{t("ld.background")}</Label>
             <div className="flex items-center gap-2">
               <input
                 type="checkbox"
                 checked={bgOn}
                 onChange={(e) => onChange({ background: e.target.checked ? "#ffffff" : "transparent" })}
-                aria-label="Background fill"
+                aria-label={t("ld.background")}
               />
               {bgOn && (
                 <input
@@ -653,21 +647,21 @@ function ElementProps({ el, onChange, onRemove }: { el: LabelElement; onChange: 
         )}
         {!isLine && (
           <div>
-            <Label htmlFor="bw">Border (mm)</Label>
+            <Label htmlFor="bw">{t("ld.border")}</Label>
             <Input id="bw" type="number" step="0.1" value={el.borderWidth ?? 0} onChange={(e) => onChange({ borderWidth: num(e.target.value) })} />
           </div>
         )}
         {!isLine && (el.borderWidth ?? 0) > 0 && (
-          <ColorField label="Border color" value={el.borderColor} onChange={(v) => onChange({ borderColor: v })} />
+          <ColorField label={t("ld.borderColor")} value={el.borderColor} onChange={(v) => onChange({ borderColor: v })} />
         )}
         {(isRect || isImage) && (
           <div>
-            <Label htmlFor="rad">Radius (mm)</Label>
+            <Label htmlFor="rad">{t("ld.radius")}</Label>
             <Input id="rad" type="number" step="0.1" value={el.radius ?? 0} onChange={(e) => onChange({ radius: num(e.target.value) })} />
           </div>
         )}
         <div>
-          <Label htmlFor="rot">Rotation (°)</Label>
+          <Label htmlFor="rot">{t("ld.rotation")}</Label>
           <Select id="rot" value={String(el.rotation ?? 0)} onChange={(e) => onChange({ rotation: Number(e.target.value) })}>
             <option value="0">0</option>
             <option value="90">90</option>
@@ -678,22 +672,22 @@ function ElementProps({ el, onChange, onRemove }: { el: LabelElement; onChange: 
       </div>
 
       {/* ---- geometry ---- */}
-      <SectionTitle>Position &amp; size</SectionTitle>
+      <SectionTitle>{t("ld.positionSize")}</SectionTitle>
       <div className="grid grid-cols-2 gap-2">
         <div>
-          <Label htmlFor="x">X (mm)</Label>
+          <Label htmlFor="x">{t("ld.x")}</Label>
           <Input id="x" type="number" value={el.x} onChange={(e) => onChange({ x: num(e.target.value) })} />
         </div>
         <div>
-          <Label htmlFor="y">Y (mm)</Label>
+          <Label htmlFor="y">{t("ld.y")}</Label>
           <Input id="y" type="number" value={el.y} onChange={(e) => onChange({ y: num(e.target.value) })} />
         </div>
         <div>
-          <Label htmlFor="ew">W (mm)</Label>
+          <Label htmlFor="ew">{t("ld.w")}</Label>
           <Input id="ew" type="number" value={el.w} onChange={(e) => onChange({ w: num(e.target.value) })} />
         </div>
         <div>
-          <Label htmlFor="eh">H (mm)</Label>
+          <Label htmlFor="eh">{t("ld.h")}</Label>
           <Input id="eh" type="number" value={el.h} onChange={(e) => onChange({ h: num(e.target.value) })} />
         </div>
       </div>

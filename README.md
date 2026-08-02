@@ -16,9 +16,12 @@ A screen is a pure function of the published metadata, the current request state
 > cookie / tenant / locale / bearer headers. Point at the backend with
 > `BACKEND_API_URL` (default `http://localhost:4000`). To run the full stack
 > locally with **no database**, start the backend with `AULA_PERSISTENCE=memory`
-> (see `../Backend/README.md` §10). The embedded `src/lib` data layer remains the
-> backend's source code (the backend is a faithful port of it) and powers the
-> test suite, but the running app reads and writes through the backend service.
+> (see `../Backend/README.md` §10). The embedded `src/lib` data layer mirrors the
+> backend's metadata/data/domain code and powers the test suite, but the running
+> app reads and writes through the backend service. The **event-driven platform
+> services** (platform bootstrap, search, cache, workflow engine, webhooks,
+> notifications, scheduler, metrics/tracing, `runApi`) now live **only** in
+> `../Backend/src/lib/` — see the note in §4.
 
 ---
 
@@ -191,7 +194,7 @@ The flat config (`defineConfig`) spreads `eslint-config-next/core-web-vitals` + 
 
 ### 3.4 Core result type
 
-`src/lib/core/result.ts` (Phase 1, the bottom layer) provides a tiny explicit-failure type used across enforcement surfaces so callers can branch on failures instead of relying solely on thrown exceptions:
+`../Backend/src/lib/core/result.ts` (Phase 1, the bottom layer) provides a tiny explicit-failure type used across enforcement surfaces so callers can branch on failures instead of relying solely on thrown exceptions:
 
 ```ts
 export type Ok<T>  = { ok: true;  value: T };
@@ -203,7 +206,7 @@ Helpers: `ok(value)`, `err(error)`, `isOk(r)` / `isErr(r)` (type guards), and `u
 
 ### 3.5 Observability (Phase 11)
 
-`src/lib/observability/` is a small, OpenTelemetry-shaped instrumentation layer (barrel `index.ts`) that the API plumbing and tracing helper use, and that the health endpoint surfaces. It is designed to be swapped for a real OTel meter/tracer/exporter without touching call sites.
+A small, OpenTelemetry-shaped instrumentation layer that the API plumbing and tracing helper use, and that the health endpoint surfaces. It is designed to be swapped for a real OTel meter/tracer/exporter without touching call sites. Only `logger.ts` ships in this app; `metrics.ts` and `tracing.ts` (described below) run in `../Backend/src/lib/observability/`, alongside the `runApi` plumbing that feeds them.
 
 - **`logger.ts`** — a structured JSON logger (`logger = new Logger({ service: "aula-crm" })`) emitting one JSON line per event with levels `debug|info|warn|error`. It **redacts sensitive keys** (`password`, `token`, `secret`, `authorization`, `apikey`/`apiKey`, `email`, `phone`, `ssn`) recursively so secrets/PII never reach logs, and supports `child(fields)` loggers that carry base fields such as `correlationId`. Used by `runApi` to log 500s (`logger.error("api error", { correlationId, ... })`) and by `withSpan`.
 - **`metrics.ts`** — minimal in-process counters + histograms (`metrics = new Metrics()`): `increment(name, by?)`, `observe(name, value)` (tracks count/sum/min/max), and `snapshot()` (returns `{ counters, histograms }` with computed `avg`). `runApi` increments `api.requests` on every call and `api.errors` on failures; `GET /api/v1/health` returns `metrics.snapshot()`.
@@ -259,35 +262,40 @@ src/
                   #   icon, skeleton, spinner, empty-state
 │
 └─ lib/                                  # Layered backend (dependencies point downward)
-   ├─ core/            clock.ts, ids.ts, result.ts            # Phase 1 — bottom layer
+   ├─ core/            clock.ts, ids.ts                       # Phase 1 — bottom layer
    ├─ metadata/        types, registry, resolver, schema, validation, index   # Phase 2 — source of truth
    │  └─ entities/     ~25 EntityDefs + shared.ts             # all entity definitions
    ├─ enforcement/     errors.ts, guards.ts                   # Phase 3 — error/guard primitives
    ├─ context/         types, resolver, isolation, dev, config   # Phase 4 — RequestContext / tenancy
-   ├─ permissions/     engine, policies, cache, types          # Phase 6 — RBAC + ABAC + PII
-   ├─ data/            query-engine, repository, memory-repository, store, seed, query   # Phase 5 — gateway
-   ├─ domain/          service, state-machine, invariants, audit, index   # Phase 7 — orchestration
-   ├─ workflow/        event-bus, outbox, idempotency, retry, workflows, engine   # Phase 8
+   ├─ permissions/     engine, policies, cache, settings-access, types   # Phase 6 — RBAC + ABAC + PII
+   ├─ data/            query-engine, repository, memory-repository, store, query   # Phase 5 — gateway
+   ├─ domain/          service, state-machine, invariants, audit   # Phase 7 — orchestration
+   ├─ workflow/        event-bus, outbox, idempotency, retry    # Phase 8
    ├─ finance/         service, money, totals, number-sequence   # Phase F — billing/AR
-   ├─ integrations/    webhooks, notifications, import-export, adapters
-   ├─ jobs/            scheduler.ts                            # billing-run + mark-overdue
-   ├─ http/            handler.ts (runApi), server-context.ts  # Phase 9 — API plumbing
-   ├─ search/          engine, indexer, service                # Phase 12
-   ├─ cache/           cache, invalidation                     # Phase 12
-   ├─ security/        auth, crypto, csrf, rate-limit, xss      # Phase 13 (auth swap point)
-   ├─ config/          feature-flags, governance, migrations, release, env   # Phase 14
-   ├─ observability/   logger, metrics, tracing                # Phase 11
-   ├─ utils/           cn.ts
-   ├─ bootstrap.ts     # ensurePlatform() — wires all event subscribers once
+   ├─ http/            server-api.ts (serverApi), server-context.ts   # Phase 9 — API plumbing
+   ├─ security/        auth, crypto, csrf, rate-limit          # Phase 13 (auth swap point)
+   ├─ config/          backend, feature-flags, screens, settings-permissions   # Phase 14
+   ├─ observability/   logger                                  # Phase 11
+   ├─ i18n/            client, config, context, format, labels, messages, server
+   ├─ barcode/ labels/ pos/ reports/ utils/                    # UI-side helpers
    └─ api-client.ts    # client-side apiFetch (ApiRequestError, custom headers, If-Match)
 ```
 
-**Each `src/lib/<layer>/` folder exposes a barrel `index.ts` as its public API** — consumers import from the folder (e.g. `@/lib/config`, `@/lib/domain`, `@/lib/data`), not from individual files. Barrels exist for `cache`, `config`, `context`, `data`, `domain`, `enforcement`, `finance`, `integrations`, `metadata`, `observability`, `permissions`, `search`, `security`, and `workflow`.
+> **Platform services live in the backend.** The event-driven platform layer —
+> `bootstrap.ts` (`ensurePlatform()`), `search/` (engine, indexer, service),
+> `cache/` (cache, invalidation), `workflow/engine.ts` + `workflows.ts`,
+> `integrations/` (webhooks, notifications, adapters, import-export),
+> `jobs/scheduler.ts`, `observability/metrics.ts` + `tracing.ts`,
+> `http/handler.ts` (`runApi`), `config/env.ts` and the per-layer `index.ts`
+> barrels — is **not** part of this app any more. It runs in the standalone
+> backend (`../Backend/src/lib/...`), which this app reaches through `serverApi`
+> and the `/api/v1/*` proxy. Sections below that describe those services document
+> the backend implementation; the paths they cite are backend paths.
 
 **Outside `src/`:**
 
-- **`public/`** holds only the default Next.js starter SVGs (`file.svg`, `globe.svg`, `next.svg`, `vercel.svg`, `window.svg`) — none are referenced by the app and they are otherwise unused leftovers. The app's favicon lives under `src/app/favicon.ico`, not here.
-- **Generated / gitignored root artifacts:** `next-env.d.ts` (Next.js type shim) and `tsconfig.tsbuildinfo` (incremental TS build cache) are generated on disk and ignored. `.gitignore` ignores `node_modules`, `.next/`, `out/`, `build`, `coverage`, `.env*`, `*.pem`, `.vercel`, `*.tsbuildinfo`, and `next-env.d.ts`.
+- **`public/`** holds the generated brand assets: `icon-192.png`, `icon-512.png` and `icon-maskable-512.png` (referenced by `src/app/manifest.ts`) plus `og-image.png` (the social card in `layout.tsx`). The favicon and Apple touch icon live next to the app router as `src/app/favicon.ico` and `src/app/apple-icon.png`. All of them — and the mobile app's icons — are rendered from one source of truth by `npm run brand` (`scripts/brand/`).
+- **Generated / gitignored root artifacts:** `next-env.d.ts` (Next.js type shim) and `tsconfig.tsbuildinfo` (incremental TS build cache) are generated on disk. `.gitignore` covers `/node_modules`, `/.next`, `/.env.example`, `*.tsbuildinfo` and `.DS_Store`.
 
 ---
 
@@ -312,7 +320,7 @@ npm install
 
 ### 5.3 Environment variables / secrets
 
-Environment is validated and typed in `src/lib/config/env.ts` via a Zod schema parsing `process.env`. Invalid values throw `Invalid environment: ...`.
+Environment is validated and typed in `../Backend/src/lib/config/env.ts` via a Zod schema parsing `process.env`. Invalid values throw `Invalid environment: ...`.
 
 | Variable | Type | Default | Purpose |
 |---|---|---|---|
@@ -355,8 +363,9 @@ Verbatim from `package.json`:
 | `typecheck` | `tsc --noEmit` | Type-check without emitting. |
 | `test` | `node --experimental-transform-types --import ./tests/register.mjs --test "tests/**/*.test.ts"` | Run the `node:test` suite with TS type-stripping. |
 | `seed` | `node --experimental-transform-types --import ./tests/register.mjs scripts/seed.ts` | **Currently broken** — see note below. |
+| `brand` | `node scripts/brand/generate.mjs` | Re-render every app icon, favicon, PWA icon and the OG card for this app **and** the Expo app from `scripts/brand/mark.mjs`. |
 
-> ⚠️ **The `seed` script does not work as written.** Neither `scripts/seed.ts` nor the entire `scripts/` directory exists in the repo, so `npm run seed` fails with a module-not-found error. **Seeding does not require a CLI script:** it happens automatically at runtime. `getQueryEngine()` (`src/lib/data/store.ts`) lazily calls `seedInto(repo)` exactly once on first access (`singletons.seedPromise ??= seedInto(singletons.repo)`), and `ensurePlatform()` runs `reindexAll()` afterward. The canonical seed entry point is therefore **`seedInto(repo)` in `src/lib/data/seed.ts`** (see §19), not a standalone script. To make `npm run seed` usable, add a `scripts/seed.ts` that imports and invokes `seedInto` against a repository.
+> ⚠️ **The `seed` script does not work as written.** `scripts/seed.ts` does not exist (the only thing under `scripts/` is the brand generator), so `npm run seed` fails with a module-not-found error. Seeding now belongs to the backend: run `npm run seed` in `../Backend`, which owns the seed data and the platform bootstrap. Remove this script here, or add a `scripts/seed.ts` that drives the backend's seeder, if you want the command to work from this package.
 
 **CI** (`.github/workflows/ci.yml`): on push to `main` + PRs, Node 20, `working-directory: aula-crm` → `npm ci` → `npm run lint` → `npm run typecheck` → `npm test` → `npm run build`. CI does **not** invoke `npm run seed`.
 
@@ -712,7 +721,7 @@ if (expectedVersion !== undefined && current.version !== expectedVersion) {
 }
 ```
 
-`update` also throws `ConflictError("record no longer exists")` if the row vanished. The HTTP layer derives `expectedVersion` from the `If-Match` header via `parseIfMatch` (`src/lib/http/handler.ts`): strips quotes, `Number(...)`, returns it if finite, else `undefined`.
+`update` also throws `ConflictError("record no longer exists")` if the row vanished. The HTTP layer derives `expectedVersion` from the `If-Match` header via `parseIfMatch` (`../Backend/src/lib/http/handler.ts`): strips quotes, `Number(...)`, returns it if finite, else `undefined`.
 
 ### 8.3 Query model
 
@@ -735,7 +744,7 @@ export interface AggregateRow   { key: string | null; measures: Record<string, n
 
 Paging constants: `DEFAULT_PAGE_SIZE = 25`, `MAX_PAGE_SIZE = 200`. `normalizePaging` floors+clamps: `page = max(1, floor(page ?? 1))`, `pageSize = min(200, max(1, floor(pageSize ?? 25)))`.
 
-**`parseListQuery`** (`src/lib/http/handler.ts`) parses `?q=&page=&pageSize=&sort=field:dir&filter.<field>=value`:
+**`parseListQuery`** (`../Backend/src/lib/http/handler.ts`) parses `?q=&page=&pageSize=&sort=field:dir&filter.<field>=value`:
 - `sort` — reads **all** `sort` params; splits on `:` into `{ field, dir }`; `dir` is `desc` only if exactly `"desc"`, else `asc`. Multiple `sort` params accumulate.
 - `filter.<field>=value` — any key starting with `filter.` with a non-empty value emits `{ field, op: "eq", value }`. Numeric-looking strings (`/^-?\d+(\.\d+)?$/`) are coerced to Number. Only `eq` is producible from query strings.
 - `q` → `query.search`; `page`/`pageSize` → `Number(...)`. Empty values are omitted.
@@ -758,8 +767,8 @@ Computed/system fields can never come from the client: write schemas strip them;
 
 - **IDs** (`src/lib/core/ids.ts`): `newId(prefix?)` → `${prefix}_${randomUUID()}` (the prefix routes the in-memory repo to a collection); `newCorrelationId()` → `cid_${uuid}`.
 - **Clock** (`src/lib/core/clock.ts`): `systemClock` (wall clock) + `fixedClock(at)` for tests. The engine injects timestamps via `this.clock.isoNow()`; `ctx.at` is the single source of truth for audit timestamps.
-- **Cache** (`src/lib/cache/`): `InMemoryCache` (default TTL 30,000 ms, read-through `wrap`). `registerCacheInvalidation()` subscribes to `"*"` and drops `stats:${tenantId}:` on any write in that tenant.
-- **Search** (`src/lib/search/`): `InMemorySearchEngine` scores by title-includes (+3) / title-startsWith (+2) / text-includes (+1). `registerSearchIndexing()` subscribes to `"*"` (remove on `.deleted`, reindex otherwise). `search(ctx, term, opts)` filters hits by `<entity>:read` so it never leaks unreadable records.
+- **Cache** (`../Backend/src/lib/cache/`): `InMemoryCache` (default TTL 30,000 ms, read-through `wrap`). `registerCacheInvalidation()` subscribes to `"*"` and drops `stats:${tenantId}:` on any write in that tenant.
+- **Search** (`../Backend/src/lib/search/`): `InMemorySearchEngine` scores by title-includes (+3) / title-startsWith (+2) / text-includes (+1). `registerSearchIndexing()` subscribes to `"*"` (remove on `.deleted`, reindex otherwise). `search(ctx, term, opts)` filters hits by `<entity>:read` so it never leaks unreadable records.
 
 ### 8.6 The store + swap points
 
@@ -768,12 +777,12 @@ Computed/system fields can never come from the client: write schemas strip them;
 | Concern | In-memory default | Swap point | Replace with |
 |---|---|---|---|
 | Repository | `new InMemoryRepository()` | `store.ts:create()` | `PostgresRepository` (same `Repository` interface; `RepoQuery`/`AggregateQuery` map to WHERE/ORDER/LIMIT/GROUP BY) |
-| Cache | `new InMemoryCache()` | `src/lib/cache/cache.ts` | `RedisCache` (`get/set/delete/invalidatePrefix/wrap`) |
+| Cache | `new InMemoryCache()` | `../Backend/src/lib/cache/cache.ts` | `RedisCache` (`get/set/delete/invalidatePrefix/wrap`) |
 | Event bus | `new InMemoryEventBus()` | `src/lib/workflow/event-bus.ts` | Redis/broker bus (`subscribe/publish`) |
-| Search | `new InMemorySearchEngine()` | `src/lib/search/engine.ts` | OpenSearch/Typesense (`index/remove/clear/size/search`) |
+| Search | `new InMemorySearchEngine()` | `../Backend/src/lib/search/engine.ts` | OpenSearch/Typesense (`index/remove/clear/size/search`) |
 | Auth | `devAuthenticator` | `setAuthenticator` in `src/lib/context/resolver.ts` | `jwtAuthenticator(secret)` (JWT/OIDC) |
 
-Subscribers (search indexing, cache invalidation, webhooks, notifications, workflows) are wired once by `ensurePlatform()` in `src/lib/bootstrap.ts`, which also calls `reindexAll()` after seeding.
+Subscribers (search indexing, cache invalidation, webhooks, notifications, workflows) are wired once by `ensurePlatform()` in `../Backend/src/lib/bootstrap.ts`, which also calls `reindexAll()` after seeding.
 
 ---
 
@@ -984,11 +993,11 @@ The `/finance` route (server, `force-dynamic`) provides a finance overview (paym
 
 ## 12. Automation & Integrations
 
-Bootstrap: `getDomainService()` calls `ensurePlatform()` (`src/lib/bootstrap.ts`) after the store is seeded, wiring (in order, each self-guarded against double-subscription): `seedFeatureFlags` → `registerWorkflows` → `registerSearchIndexing` → `registerCacheInvalidation` → `registerWebhookDelivery` → `registerNotifications` → `reindexAll`.
+Bootstrap: `getDomainService()` calls `ensurePlatform()` (`../Backend/src/lib/bootstrap.ts`) after the store is seeded, wiring (in order, each self-guarded against double-subscription): `seedFeatureFlags` → `registerWorkflows` → `registerSearchIndexing` → `registerCacheInvalidation` → `registerWebhookDelivery` → `registerNotifications` → `reindexAll`.
 
 ### 12.1 Webhooks
 
-`src/lib/integrations/webhooks.ts` — tenant + org-scoped endpoints subscribing to domain event types, delivered HMAC-signed with retry, logged in a capped in-memory delivery log.
+`../Backend/src/lib/integrations/webhooks.ts` — tenant + org-scoped endpoints subscribing to domain event types, delivered HMAC-signed with retry, logged in a capped in-memory delivery log.
 
 - **Shapes:** `WebhookEndpoint { id, tenantId, orgId, url, secret, events[], createdAt }`; `WebhookDelivery { id, endpointId, tenantId, orgId, at, type, ok, status, error? }`.
 - **`webhookRegistry`** (plain in-memory arrays, *not* `globalThis`-pinned — resets on reload, cap 200 deliveries): `register`, `remove`, `get`, `list`, `matching(event)` (tenant+org match AND `events` includes `"*"` or the exact type), `recordDelivery`, `listDeliveries`.
@@ -1002,7 +1011,7 @@ Bootstrap: `getDomainService()` calls `ensurePlatform()` (`src/lib/bootstrap.ts`
 
 ### 12.2 Notifications
 
-`src/lib/integrations/notifications.ts` — an in-memory inbox simulating email/system sends that populates the topbar bell. `Notification { id, at, tenantId, orgId, channel: "email"|"system", subject, body, eventType, read }`; capped at 300, tenant+org-scoped. `registerNotifications()` subscribes to exactly **4 topics**:
+`../Backend/src/lib/integrations/notifications.ts` — an in-memory inbox simulating email/system sends that populates the topbar bell. `Notification { id, at, tenantId, orgId, channel: "email"|"system", subject, body, eventType, read }`; capped at 300, tenant+org-scoped. `registerNotifications()` subscribes to exactly **4 topics**:
 
 | Topic | Channel | Subject |
 |---|---|---|
@@ -1015,7 +1024,7 @@ These topics are published by domain/finance state transitions. **Topbar bell** 
 
 ### 12.3 Scheduler & cron
 
-`src/lib/jobs/scheduler.ts` — two daily `JOBS`:
+`../Backend/src/lib/jobs/scheduler.ts` — two daily `JOBS`:
 
 | Job | Action |
 |---|---|
@@ -1028,7 +1037,7 @@ The **/automation screen** (server, `force-dynamic`) shows three admin cards: Sc
 
 ### 12.4 Integration adapters
 
-`src/lib/integrations/adapters.ts` is a pluggable extensibility/swap point for **outbound integrations** (CRM sync, email, messaging) layered on the event bus — distinct from webhooks (HTTP delivery) and notifications (in-app inbox):
+`../Backend/src/lib/integrations/adapters.ts` is a pluggable extensibility/swap point for **outbound integrations** (CRM sync, email, messaging) layered on the event bus — distinct from webhooks (HTTP delivery) and notifications (in-app inbox):
 
 - **`IntegrationAdapter { name, events: string[], handle(event) }`** — an adapter declares the event types it reacts to (`"*"` for all) and an async `handle`.
 - **`AdapterRegistry`** (singleton `adapterRegistry`) — `enable(adapter)` registers the adapter and subscribes it to the event bus for each of its `events` types (logging `"integration adapter enabled"`); `list()` returns the enabled adapter names. (Unsubscribers are retained internally.)
@@ -1073,7 +1082,7 @@ Three modules under `src/lib/config/` form the metadata-governance + release + m
 
 ## 13. API Reference
 
-Base path: `/api/v1`. 29 route files. Every route except `export/[entity]`, `webhooks/echo`, and `health` runs through `runApi(req, fn, opts)` (`src/lib/http/handler.ts`), which resolves context, rate-limits, enforces CSRF on mutations, runs the handler, and serializes data/errors.
+Base path: `/api/v1`. 29 route files. Every route except `export/[entity]`, `webhooks/echo`, and `health` runs through `runApi(req, fn, opts)` (`../Backend/src/lib/http/handler.ts`), which resolves context, rate-limits, enforces CSRF on mutations, runs the handler, and serializes data/errors.
 
 ### 13.1 Conventions
 
@@ -1448,9 +1457,9 @@ The app builds and runs as a standard Next.js 16 application (`npm run build` �
 | Concern | Swap point | Replace with |
 |---|---|---|
 | Persistence | `src/lib/data/store.ts` (`new InMemoryRepository()`) | `PostgresRepository implements Repository` |
-| Cache | `src/lib/cache/cache.ts` | `RedisCache implements Cache` |
+| Cache | `../Backend/src/lib/cache/cache.ts` | `RedisCache implements Cache` |
 | Event bus | `src/lib/workflow/event-bus.ts` | Redis/broker bus implementing `EventBus` |
-| Search | `src/lib/search/engine.ts` | OpenSearch / Typesense client |
+| Search | `../Backend/src/lib/search/engine.ts` | OpenSearch / Typesense client |
 | Auth | `src/lib/context/resolver.ts` via `enableJwtAuth(secret)` | JWT/OIDC (`jwtAuthenticator`) |
 
 3. **Auth** — call `enableJwtAuth(AULA_JWT_SECRET)` to swap the dev cookie authenticator for real JWT/OIDC (tokens must carry `tenantId`+`orgId` claims). No other layer changes.

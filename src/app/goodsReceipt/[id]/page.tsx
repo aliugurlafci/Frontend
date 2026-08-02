@@ -3,8 +3,16 @@ import { GoodsReceiptEditor } from "@/components/crm/goods-receipt-editor";
 
 export const dynamic = "force-dynamic";
 
-export default async function GoodsReceiptEditorPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function GoodsReceiptEditorPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ po?: string }>;
+}) {
   const { id } = await params;
+  // `?po=` arrives from the pending-orders list, which is how receiving starts.
+  const { po } = await searchParams;
   const [suppliers, products, warehouses, purchaseOrders] = await Promise.all([
     serverApi.list("supplier", { pageSize: 200 }),
     serverApi.list("product", { pageSize: 500, filters: [{ field: "active", op: "eq", value: true }] }),
@@ -24,6 +32,7 @@ export default async function GoodsReceiptEditorPage({ params }: { params: Promi
       products={products.items}
       warehouses={warehouses.items}
       purchaseOrders={receivablePOs}
+      initialPoId={po ?? ""}
     />
   );
 }
