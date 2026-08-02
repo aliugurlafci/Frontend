@@ -13,6 +13,8 @@ import { Badge } from "@/components/ui/badge";
 import { Input, Label, Select } from "@/components/ui/input";
 import { Icon } from "@/components/ui/icon";
 import { useT } from "@/lib/i18n/client";
+import { useI18n } from "@/lib/i18n/context";
+import { metadata } from "@/lib/metadata";
 
 interface GrnLine {
   productId: string;
@@ -48,6 +50,8 @@ export function GoodsReceiptEditor({
 }) {
   const router = useRouter();
   const t = useT();
+  const { enumLabel } = useI18n();
+  const statusField = metadata.getEntity("goodsReceipt").fields.find((f) => f.name === "status")!;
   const isNew = id === "new";
   const [doc, setDoc] = useState<EntityRecord | null>(null);
   const [poId, setPoId] = useState<string>("");
@@ -177,7 +181,11 @@ export function GoodsReceiptEditor({
             <Icon name="chevronLeft" className="inline h-4 w-4" /> {t("grn.listTitle")}
           </Link>
           <h1 className="text-lg font-semibold">{isNew ? t("grn.new") : String(doc?.number ?? "GRN")}</h1>
-          {doc && <Badge tone={doc.status === "posted" ? "success" : doc.status === "void" ? "danger" : "neutral"}>{String(doc.status)}</Badge>}
+          {doc && (
+            <Badge tone={doc.status === "posted" ? "success" : doc.status === "void" ? "danger" : "neutral"}>
+              {enumLabel(statusField, String(doc.status ?? ""))}
+            </Badge>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {isNew ? (

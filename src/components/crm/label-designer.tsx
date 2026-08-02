@@ -21,9 +21,9 @@ import {
   type LabelTemplateDef,
 } from "@/lib/labels/types";
 
+/** Preview stand-in when no real product is picked; `name` is localized below. */
 const FALLBACK_PRODUCT = {
   id: "sample",
-  name: "Sample Product",
   sku: "SAMPLE-001",
   barcode: "2000000010014",
   barcodeType: "ean13",
@@ -138,7 +138,10 @@ export function LabelDesigner() {
   }, [zoom]);
 
   const selected = useMemo(() => template.elements.find((e) => e.id === selectedId) ?? null, [template, selectedId]);
-  const sample = useMemo(() => products.find((p) => String(p.id) === sampleId) ?? FALLBACK_PRODUCT, [products, sampleId]);
+  const sample = useMemo(
+    () => products.find((p) => String(p.id) === sampleId) ?? { ...FALLBACK_PRODUCT, name: t("ld.sampleName") },
+    [products, sampleId, t],
+  );
   const pxPerMm = zoom;
 
   function updateElement(id: string, patch: Partial<LabelElement>) {
@@ -186,7 +189,7 @@ export function LabelDesigner() {
 
   async function save() {
     if (!template.name.trim()) {
-      toast.error("Name the template");
+      toast.error(t("ld.nameRequired"));
       return;
     }
     setBusy(true);
@@ -201,11 +204,11 @@ export function LabelDesigner() {
       };
       if (currentId) {
         await apiFetch(`/entities/labelTemplate/${currentId}`, { method: "PATCH", body, headers: { "If-Match": String(version) } });
-        toast.success("Template saved");
+        toast.success(t("ld.saved"));
       } else {
         const created = await apiFetch<EntityRecord>("/entities/labelTemplate", { method: "POST", body });
         setCurrentId(String(created.id));
-        toast.success("Template created");
+        toast.success(t("ld.created"));
       }
       const items = await refreshTemplates();
       const fresh = items.find((t) => String(t.id) === currentId);
@@ -223,7 +226,7 @@ export function LabelDesigner() {
     setBusy(true);
     try {
       await apiFetch(`/entities/labelTemplate/${currentId}`, { method: "DELETE", headers: { "If-Match": String(version) } });
-      toast.success("Template deleted");
+      toast.success(t("ld.deleted"));
       newTemplate();
       await refreshTemplates();
     } catch (e) {
@@ -269,16 +272,16 @@ export function LabelDesigner() {
           <CardHeader title={t("label.add")} />
           <CardBody className="grid grid-cols-2 gap-2 lg:grid-cols-1">
             {([
-              ["barcode", "barcode", "Barcode"],
-              ["field", "edit", "Field"],
-              ["price", "wallet", "Price"],
-              ["text", "note", "Text"],
-              ["image", "file", "Image"],
-              ["line", "minus", "Line"],
-              ["rect", "square", "Box"],
-            ] as [LabelElementType, string, string][]).map(([type, icon, label]) => (
+              ["barcode", "barcode"],
+              ["field", "edit"],
+              ["price", "wallet"],
+              ["text", "note"],
+              ["image", "file"],
+              ["line", "minus"],
+              ["rect", "square"],
+            ] as [LabelElementType, string][]).map(([type, icon]) => (
               <Button key={type} size="sm" variant="ghost" className="justify-start" onClick={() => addElement(type)}>
-                <Icon name={icon} className="h-3.5 w-3.5" /> {label}
+                <Icon name={icon} className="h-3.5 w-3.5" /> {t(`ld.el.${type}`)}
               </Button>
             ))}
           </CardBody>
@@ -373,11 +376,11 @@ export function LabelDesigner() {
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <Label htmlFor="w">Width (mm)</Label>
+                    <Label htmlFor="w">{t("ld.widthMm")}</Label>
                     <Input id="w" type="number" value={template.widthMm} onChange={(e) => setTemplate((t) => ({ ...t, widthMm: Number(e.target.value) || 1 }))} />
                   </div>
                   <div>
-                    <Label htmlFor="h">Height (mm)</Label>
+                    <Label htmlFor="h">{t("ld.heightMm")}</Label>
                     <Input id="h" type="number" value={template.heightMm} onChange={(e) => setTemplate((t) => ({ ...t, heightMm: Number(e.target.value) || 1 }))} />
                   </div>
                 </div>
@@ -391,15 +394,15 @@ export function LabelDesigner() {
                     }}
                     value=""
                   >
-                    <option value="">Choose…</option>
-                    <option value="40x30">40 × 30 mm (thermal)</option>
-                    <option value="50x30">50 × 30 mm (thermal)</option>
-                    <option value="58x40">58 × 40 mm (thermal)</option>
-                    <option value="100x50">100 × 50 mm (shipping)</option>
-                    <option value="63.5x38.1">63.5 × 38.1 mm (A4 sheet)</option>
+                    <option value="">{t("ld.presetChoose")}</option>
+                    <option value="40x30">{t("ld.presetThermal", { size: "40 × 30" })}</option>
+                    <option value="50x30">{t("ld.presetThermal", { size: "50 × 30" })}</option>
+                    <option value="58x40">{t("ld.presetThermal", { size: "58 × 40" })}</option>
+                    <option value="100x50">{t("ld.presetShipping", { size: "100 × 50" })}</option>
+                    <option value="63.5x38.1">{t("ld.presetSheet", { size: "63.5 × 38.1" })}</option>
                   </Select>
                 </div>
-                <p className="text-xs text-muted">Select an element on the canvas to edit it, or add one from the palette.</p>
+                <p className="text-xs text-muted">{t("ld.selectHint")}</p>
               </>
             ) : (
               <ElementProps el={selected} onChange={(patch) => updateElement(selected.id, patch)} onRemove={() => removeElement(selected.id)} />
@@ -462,7 +465,7 @@ function ElementProps({ el, onChange, onRemove }: { el: LabelElement; onChange: 
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium uppercase text-muted">{el.type}</span>
+        <span className="text-xs font-medium uppercase text-muted">{t(`ld.el.${el.type}`)}</span>
         <button onClick={onRemove} className="text-muted hover:text-danger" aria-label={t("ld.removeElement")}>
           <Icon name="trash" className="h-3.5 w-3.5" />
         </button>
@@ -493,11 +496,11 @@ function ElementProps({ el, onChange, onRemove }: { el: LabelElement; onChange: 
         <div className="grid grid-cols-2 gap-2">
           <div>
             <Label htmlFor="prefix">{t("ld.prefix")}</Label>
-            <Input id="prefix" value={el.prefix ?? ""} onChange={(e) => onChange({ prefix: e.target.value })} placeholder="e.g. ₺" />
+            <Input id="prefix" value={el.prefix ?? ""} onChange={(e) => onChange({ prefix: e.target.value })} placeholder={t("ld.prefixPlaceholder")} />
           </div>
           <div>
             <Label htmlFor="suffix">{t("ld.suffix")}</Label>
-            <Input id="suffix" value={el.suffix ?? ""} onChange={(e) => onChange({ suffix: e.target.value })} placeholder="e.g. /ad" />
+            <Input id="suffix" value={el.suffix ?? ""} onChange={(e) => onChange({ suffix: e.target.value })} placeholder={t("ld.suffixPlaceholder")} />
           </div>
         </div>
       )}

@@ -38,13 +38,35 @@ function isPublicPage(pathname: string): boolean {
   return PUBLIC_PAGES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
+/**
+ * Static assets and metadata routes that must resolve without a session.
+ *
+ * The web manifest matters most: the browser fetches `<link rel="manifest">`
+ * *without* credentials unless it is marked `use-credentials`, so gating it
+ * bounced every fetch to /login — the app could never be installed as a PWA and
+ * each page load logged a redirect. Icons, robots.txt and the OG image are
+ * public by nature too.
+ */
+const PUBLIC_FILES = new Set([
+  "/manifest.webmanifest",
+  "/robots.txt",
+  "/sitemap.xml",
+  "/favicon.ico",
+  "/apple-icon.png",
+]);
+const PUBLIC_FILE_RE = /^\/[^/]+\.(?:png|jpg|jpeg|svg|gif|webp|ico|txt|xml|json|webmanifest)$/;
+
+function isPublicAsset(pathname: string): boolean {
+  return PUBLIC_FILES.has(pathname) || PUBLIC_FILE_RE.test(pathname);
+}
+
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const isApi = pathname.startsWith("/api");
   const hasSession = Boolean(req.cookies.get(SESSION_COOKIE));
 
   // Login gate: page requests (not API/assets) without a session → /login.
-  if (!isApi && !isPublicPage(pathname) && !hasSession) {
+  if (!isApi && !isPublicPage(pathname) && !isPublicAsset(pathname) && !hasSession) {
     const url = req.nextUrl.clone();
     url.pathname = "/login";
     url.search = `?next=${encodeURIComponent(pathname)}`;
