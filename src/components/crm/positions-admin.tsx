@@ -190,8 +190,18 @@ export function PositionsAdmin({
   function clearSettings() {
     setEditing((d) => (d ? { ...d, permissions: d.permissions.filter((g) => !g.startsWith("settings.")) } : d));
   }
-  /** Localized operation label, falling back to the raw verb. */
-  function opLabel(op: string): string {
+  /**
+   * Localized operation label. An entity may name a shared verb more precisely
+   * (`perm.op.cart.send` → "Send to register" rather than the generic "Send"),
+   * so the entity-scoped key wins when it exists; otherwise the shared verb
+   * label, otherwise the raw verb.
+   */
+  function opLabel(op: string, entity?: string): string {
+    if (entity) {
+      const scoped = `perm.op.${entity}.${op}`;
+      const scopedLabel = t(scoped);
+      if (scopedLabel !== scoped) return scopedLabel;
+    }
     const key = `perm.op.${op}`;
     const label = t(key);
     return label === key ? op : label;
@@ -401,7 +411,7 @@ export function PositionsAdmin({
                                                 disabled={star}
                                                 onChange={() => toggleGrant(`${e.name}:${a}`)}
                                               />
-                                              <span>{opLabel(a)}</span>
+                                              <span>{opLabel(a, e.name)}</span>
                                             </label>
                                           ))
                                         )}

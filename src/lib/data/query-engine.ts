@@ -281,11 +281,11 @@ export class QueryEngine {
 
   /** Drop fields the caller may not read (field-level enforcement). */
   private project(ctx: RequestContext, entity: EntityDef, record: EntityRecord): EntityRecord {
-    const readable = new Set(this.permissions.readableFields(ctx, entity));
+    // Which fields are hidden is identical for every record of a page, so ask for
+    // the denied list (cached per identity + entity) and delete only those.
+    const denied = this.permissions.deniedFields(ctx, entity);
     const out = { ...record };
-    for (const field of entity.fields) {
-      if (!readable.has(field.name)) delete out[field.name];
-    }
+    for (const field of denied) delete out[field];
     return out;
   }
 }

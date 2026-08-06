@@ -11,8 +11,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Select, Label } from "@/components/ui/input";
 import { Icon } from "@/components/ui/icon";
+import { Tabs } from "@/components/ui/tabs";
 import { resolveProduct, useBarcodeScanner, playBeep, newIdempotencyKey } from "@/lib/pos/scanner";
+import { buildProductIndex, searchProductIndex } from "@/lib/pos/product-search";
 import { ScannerChip } from "@/components/crm/scanner-chip";
+import { RegisterQueue } from "@/components/crm/register-queue";
 import type { EntityRecord } from "@/lib/metadata/types";
 
 interface CartLine {
@@ -25,19 +28,41 @@ interface CartLine {
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
+/**
+ * The cart screen: a sale tab (build a basket, then either send it to the cash
+ * desk or ring it up here) plus the register queue tab where a cashier works the
+ * baskets that were sent. Each capability is a separate grant, so a position may
+ * hold any combination — the tabs and buttons follow.
+ */
 export function CartView({
   products,
   accounts,
   warehouses,
   branches,
+  canSend = false,
+  canCheckout = false,
+  canCredit = false,
+  canQueue = false,
+  canEditQueued = false,
 }: {
   products: EntityRecord[];
   accounts: EntityRecord[];
   warehouses: EntityRecord[];
   branches: EntityRecord[];
+  /** `cart:send` — may this user hand a basket to the register? */
+  canSend?: boolean;
+  /** `cart:checkout` — may this user ring the basket up directly? */
+  canCheckout?: boolean;
+  /** `cart:credit` — may this user close a basket to the customer's account? */
+  canCredit?: boolean;
+  /** `cart:read` — may this user see the register queue at all? */
+  canQueue?: boolean;
+  /** `cart:update` — may this user change a queued basket at the register? */
+  canEditQueued?: boolean;
 }) {
   const t = useT();
   const router = useRouter();
+  const [tab, setTab] = useState<"sale" | "queue">("sale");
   const [lines, setLines] = useState<CartLine[]>([]);
   const [accountId, setAccountId] = useState("");
   const [branchId, setBranchId] = useState("");
@@ -54,9 +79,10 @@ export function CartView({
   // The product just added — briefly highlights its basket line as scan feedback.
   const [flashId, setFlashId] = useState<string | null>(null);
 
+  /** Open drafts only — baskets already at the register belong to the queue tab. */
   async function loadSaved() {
     try {
-      const res = await apiFetch<{ items: EntityRecord[] }>("/carts");
+      const res = await apiFetch<{ items: EntityRecord[] }>("/carts?status=open");
       setSavedCarts(res.items);
     } catch {
       /* ignore — no read access */
@@ -73,11 +99,9 @@ export function CartView({
     return () => clearTimeout(tmr);
   }, [flashId]);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return products;
-    return products.filter((p) => `${p.name} ${p.sku} ${p.barcode}`.toLowerCase().includes(q));
-  }, [products, search]);
+  // Search text prepared once per catalogue, so a keystroke only scans it.
+  const productIndex = useMemo(() => buildProductIndex(products), [products]);
+  const filtered = useMemo(() => searchProductIndex(productIndex, search), [productIndex, search]);
 
   function addProduct(p: EntityRecord) {
     const id = String(p.id);
@@ -217,7 +241,31 @@ export function CartView({
     }
   }
 
-  async function checkout() {
+  /**
+   * Hand the basket to the cash desk: persist it, then ask the server for its
+   * pickup code and show that code — it is what the customer quotes at the till.
+   */
+  async function sendToRegister() {
+    if (!lines.length) return;
+    setBusy(true);
+    try {
+      const id = await persist();
+      const res = await apiFetch<{ code: number }>(`/carts/${id}/send`, { method: "POST", body: {} });
+      toast.success(t("cart.sentToRegister", { code: String(res.code) }), { duration: 8000 });
+      reset();
+      await loadSaved();
+    } catch (e) {
+      toast.error(e instanceof ApiRequestError ? e.message : t("common.somethingWrong"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /**
+   * Close the basket here and now: `paid` tenders the total in cash, `credit`
+   * invoices it and leaves the balance on the customer's account.
+   */
+  async function checkout(settlement: "paid" | "credit" = "paid") {
     if (!lines.length) return;
     setBusy(true);
     if (!idemRef.current) idemRef.current = newIdempotencyKey();
@@ -226,10 +274,13 @@ export function CartView({
       const res = await apiFetch<{ invoice: EntityRecord }>(`/carts/${id}/checkout`, {
         method: "POST",
         headers: { "Idempotency-Key": idemRef.current },
-        body: {},
+        body: {
+          settlement,
+          payments: settlement === "paid" ? [{ method: "cash", amount: totals.total }] : [],
+        },
       });
       idemRef.current = ""; // confirmed → next checkout uses a fresh token
-      toast.success(t("cart.checkoutDone"));
+      toast.success(settlement === "credit" ? t("cart.closedOnAccount") : t("cart.checkoutDone"));
       reset();
       await loadSaved();
       const invId = res.invoice?.id;
@@ -285,7 +336,17 @@ export function CartView({
           <h1 className="text-lg font-semibold">{t("cart.title")}</h1>
           <p className="text-xs text-muted">{t("cart.subtitle")}</p>
         </div>
-        {savedCarts.length > 0 && (
+        {canQueue && (
+          <Tabs
+            items={[
+              { value: "sale", label: t("cart.tab.sale") },
+              { value: "queue", label: t("cart.tab.queue") },
+            ]}
+            value={tab}
+            onChange={(v) => setTab(v as "sale" | "queue")}
+          />
+        )}
+        {tab === "sale" && savedCarts.length > 0 && (
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted">{t("cart.savedCarts")}</span>
             <div className="flex flex-wrap gap-1">
@@ -304,6 +365,9 @@ export function CartView({
         )}
       </div>
 
+      {canQueue && tab === "queue" ? (
+        <RegisterQueue products={products} accounts={accounts} canEdit={canEditQueued} />
+      ) : (
       <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
         {/* Product picker */}
         <Card>
@@ -453,10 +517,32 @@ export function CartView({
                 <Button variant="secondary" size="sm" disabled={busy || lines.length === 0} onClick={saveDraft}>
                   <Icon name="file" className="h-3.5 w-3.5" /> {t("cart.save")}
                 </Button>
-                <Button variant="primary" size="sm" loading={busy} disabled={lines.length === 0} onClick={checkout} className="flex-1">
-                  <Icon name="cart" className="h-3.5 w-3.5" /> {t("cart.checkout")} {totals.total > 0 ? `· ${money(totals.total)}` : ""}
-                </Button>
+                {canSend && (
+                  <Button variant="primary" size="sm" loading={busy} disabled={lines.length === 0} onClick={sendToRegister} className="flex-1">
+                    <Icon name="send" className="h-3.5 w-3.5" /> {t("cart.sendToRegister")}
+                  </Button>
+                )}
+                {canCheckout && (
+                  <Button
+                    variant={canSend ? "secondary" : "primary"}
+                    size="sm"
+                    loading={busy}
+                    disabled={lines.length === 0}
+                    onClick={() => void checkout("paid")}
+                    className={canSend ? undefined : "flex-1"}
+                  >
+                    <Icon name="cart" className="h-3.5 w-3.5" /> {t("cart.checkout")} {totals.total > 0 ? `· ${money(totals.total)}` : ""}
+                  </Button>
+                )}
+                {canCredit && (
+                  <Button variant="secondary" size="sm" disabled={busy || lines.length === 0} onClick={() => void checkout("credit")}>
+                    <Icon name="receipt" className="h-3.5 w-3.5" /> {t("queue.closeOnAccount")}
+                  </Button>
+                )}
               </div>
+              {!canSend && !canCheckout && !canCredit && (
+                <p className="text-xs text-muted">{t("cart.noCloseGrant")}</p>
+              )}
               {lines.length > 0 && (
                 <button type="button" onClick={reset} className="text-xs text-muted hover:text-foreground">
                   {t("cart.clear")}
@@ -466,6 +552,7 @@ export function CartView({
           </Card>
         </div>
       </div>
+      )}
     </div>
   );
 }

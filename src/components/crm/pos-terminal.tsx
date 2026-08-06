@@ -12,6 +12,7 @@ import { docTotals, lineTotals } from "@/lib/finance/totals";
 import { useT } from "@/lib/i18n/client";
 import { cn } from "@/lib/utils/cn";
 import { resolveProduct, useBarcodeScanner, playBeep, newIdempotencyKey } from "@/lib/pos/scanner";
+import { buildProductIndex, searchProductIndex } from "@/lib/pos/product-search";
 import { ScannerChip } from "@/components/crm/scanner-chip";
 import type { EntityRecord } from "@/lib/metadata/types";
 
@@ -105,11 +106,12 @@ export function PosTerminal() {
   const change = Math.max(0, Math.round((Number(tendered || 0) - totals.total) * 100) / 100);
   const money = (n: number) => formatMoney(n, currencyCode);
 
-  const filtered = useMemo(() => {
-    const q = scan.trim().toLowerCase();
-    if (!q) return [] as EntityRecord[];
-    return products.filter((p) => `${p.name} ${p.sku} ${p.barcode}`.toLowerCase().includes(q)).slice(0, 8);
-  }, [products, scan]);
+  // Search text prepared once per catalogue, so a keystroke only scans it.
+  const productIndex = useMemo(() => buildProductIndex(products), [products]);
+  const filtered = useMemo(
+    () => searchProductIndex(productIndex, scan, { limit: 8, whenEmpty: "none" }),
+    [productIndex, scan],
+  );
 
   function addProduct(p: EntityRecord) {
     const id = String(p.id);
